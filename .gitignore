@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Local Sunwave databases and backups stay off GitHub.
+data/*.db
+data/backups/

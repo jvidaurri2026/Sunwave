@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sunwave-tracker
+    runtime: python
+    plan: starter
+    buildCommand: "python --version"
+    startCommand: "python server.py --host 0.0.0.0"
+    envVars:
+      - key: SUNWAVE_DATA_DIR
+        value: /var/data
+      - key: GROUPME_BOT_ID
+        sync: false
+    disk:
+      name: sunwave-tracker-data
+      mountPath: /var/data
+      sizeGB: 1

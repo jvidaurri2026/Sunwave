@@ -1,0 +1,9 @@
+{
+  "botId": "paste-your-groupme-bot-id-here",
+  "keywordResponses": [
+    {
+      "keyword": "yard snapshot",
+      "action": "yard_snapshot"
+    }
+  ]
+}

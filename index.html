@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173f35">
+  <title>Sunwave Tracker</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css?v=253">
+</head>
+<body class="booting">
+  <main class="app-shell">
+    <section id="loginView" class="auth-view">
+      <div class="brand-block">
+        <span class="brand-mark">ET</span>
+        <div>
+          <h1>Sunwave Tracker</h1>
+          <p>Register equipment, assign responsibility, and capture field location.</p>
+        </div>
+      </div>
+
+      <form id="loginForm" class="panel auth-panel">
+        <h2>Sign in</h2>
+        <label>
+          Username
+          <input id="loginUsername" name="username" autocomplete="username" required>
+        </label>
+        <label>
+          Password
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+        </label>
+        <button class="primary" type="submit">Sign in</button>
+        <p id="loginError" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="appView" class="workspace" hidden>
+      <header class="topbar">
+        <div class="brand-inline">
+          <span class="brand-mark small">ET</span>
+          <div>
+            <strong>Sunwave Tracker</strong>
+            <span id="roleBadge"></span>
+          </div>
+        </div>
+        <div class="top-actions">
+          <span id="connectionStatus" class="connection-status" role="status">Checking connection</span>
+          <button id="exportBtn" class="ghost" type="button">Export CSV</button>
+          <button id="logoutBtn" class="ghost" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <nav class="app-menu" aria-label="Main menu">
+        <button class="menu-item admin-only" type="button" data-page="projects" hidden>Projects</button>
+        <button class="menu-item" type="button" data-page="dashboard">Dashboard</button>
+        <button class="menu-item" type="button" data-page="register">Register</button>
+        <button class="menu-item" type="button" data-page="list">Equipment List</button>
+        <button class="menu-item" type="button" data-page="asset-lookup">Asset Lookup</button>
+        <button class="menu-item" type="button" data-page="inventory">Inventory</button>
+        <button class="menu-item" type="button" data-page="maps">Maps</button>
+        <button class="menu-item" type="button" data-page="history">History</button>
+        <button class="menu-item" type="button" data-page="job-audit">Job Audit</button>
+        <button class="menu-item" type="button" data-page="quantity-assets">Quantity Assets</button>
+        <button class="menu-item" type="button" data-page="current-audits">Current Audits</button>
+        <button class="menu-item" type="button" data-page="audit-history">Audit History</button>
+        <button class="menu-item admin-only" type="button" data-page="categories" hidden>Categories</button>
+        <button class="menu-item admin-only" type="button" data-page="jobs" hidden>Add Jobs</button>
+        <button class="menu-item admin-only" type="button" data-page="users" hidden>Users</button>
+      </nav>
+
+      <section class="page-view" data-page-view="projects" hidden>
+        <section class="project-picker">
+          <div class="panel-title">
+            <div>
+              <h2>Choose project</h2>
+              <p class="form-message">Select the workspace you want to open.</p>
+            </div>
+          </div>
+          <div class="project-options">
+            <article class="project-option">
+              <span class="project-mark tracker">ST</span>
+              <div>
+                <h3>Sunwave Tracker</h3>
+                <p>Equipment, jobs, audits, inventory, and locations.</p>
+              </div>
+              <button class="primary" type="button" data-page="dashboard">Open Tracker</button>
+            </article>
+            <article class="project-option">
+              <span class="project-mark shop">SS</span>
+              <div>
+                <h3>Sunwave Shop</h3>
+                <p>Separate shop workspace ready for new modules.</p>
+              </div>
+              <a class="button-link primary" href="./sunwave-shop/">Open Shop</a>
+            </article>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="dashboard">
+        <section class="stats" aria-label="Equipment summary">
+          <article class="dashboard-counter" data-dashboard-counter="total" role="button" tabindex="0">
+            <span id="totalCount">0</span>
+            <strong>Total assets + master qty</strong>
+          </article>
+          <article class="dashboard-counter" data-dashboard-counter="available" role="button" tabindex="0">
+            <span id="availableCount">0</span>
+            <strong>Available + master qty</strong>
+          </article>
+          <article class="dashboard-counter" data-dashboard-counter="job" role="button" tabindex="0">
+            <span id="jobAssignedCount">0</span>
+            <strong>Assigned to Job</strong>
+          </article>
+          <article class="dashboard-counter" data-dashboard-counter="master-job" role="button" tabindex="0">
+            <span id="masterJobAssignedCount">0</span>
+            <strong>Master Qty to Job</strong>
+          </article>
+          <article class="dashboard-counter" data-dashboard-counter="yard" role="button" tabindex="0">
+            <span id="yardAssignedCount">0</span>
+            <strong>On Big Spring Yard + master qty</strong>
+          </article>
+        </section>
+        <section id="dashboardCounterDetails" class="panel dashboard-counter-details" hidden>
+          <div class="panel-title">
+            <h2 id="dashboardCounterDetailsTitle">Assets</h2>
+            <button id="closeDashboardCounterDetails" class="ghost" type="button">Close</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Number</th>
+                  <th>Category</th>
+                  <th>Assigned to Job</th>
+                  <th>Quantity</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardCounterDetailsTable"></tbody>
+            </table>
+          </div>
+          <p id="dashboardCounterDetailsEmpty" class="empty-state">No assets under this counter.</p>
+        </section>
+        <section class="panel dashboard-chart" aria-label="Asset summary chart">
+          <div class="panel-title">
+            <h2>Asset summary</h2>
+            <button id="shareYardWhatsappBtn" class="secondary" type="button">Send Big Spring Yard WhatsApp</button>
+          </div>
+          <div class="chart-layout">
+            <div id="assetPieChart" class="pie-chart" role="img" aria-label="Asset summary pie chart"></div>
+            <div class="chart-legend">
+              <span><i class="legend-available"></i>Available <strong id="legendAvailableCount">0</strong></span>
+              <span><i class="legend-job"></i>Assigned to Job + Master Qty <strong id="legendJobCount">0</strong></span>
+              <span><i class="legend-yard"></i>On Big Spring Yard + Master Qty <strong id="legendYardCount">0</strong></span>
+            </div>
+          </div>
+        </section>
+        <section class="panel dashboard-chart" aria-label="Quantity asset summary chart">
+          <div class="panel-title">
+            <h2>Quantity assets</h2>
+            <span id="quantityAssetTotal" class="panel-count">0 total</span>
+          </div>
+          <div id="quantityAssetChart" class="quantity-chart"></div>
+          <p id="quantityAssetDashboardEmpty" class="empty-state">No quantity assets are enabled yet.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="register" hidden>
+        <section class="panel form-panel" id="editorPanel">
+          <div class="panel-title">
+            <h2 id="formTitle">Register equipment</h2>
+            <button id="clearFormBtn" class="icon-button" type="button" title="New record">+</button>
+          </div>
+          <form id="equipmentForm">
+            <input id="recordId" type="hidden">
+            <div class="grid-two">
+              <label>
+                Equipment number
+                <input id="equipmentName" required placeholder="EQ-1001">
+              </label>
+              <label>
+                Asset tag / QR code
+                <span class="scan-field">
+                  <input id="assetTag" placeholder="Scan or add later">
+                  <button id="scanAssetBtn" class="secondary scan-button" type="button">Scan QR</button>
+                </span>
+                <span id="assetTagMessage" class="field-message" role="alert"></span>
+              </label>
+            </div>
+            <div id="qrScanner" class="qr-scanner" hidden>
+              <div class="qr-scanner-head">
+                <strong>Scan asset tag</strong>
+                <button id="closeScannerBtn" class="ghost" type="button">Close</button>
+              </div>
+              <video id="qrVideo" playsinline muted></video>
+              <p id="qrScannerMessage" class="form-message" role="status"></p>
+            </div>
+            <div class="grid-two">
+              <label>
+                Category
+                <select id="category">
+                  <option value="">Select</option>
+                </select>
+              </label>
+              <label>
+                Assigned to Job
+                <select id="assignedTo">
+                  <option value="">Select</option>
+                </select>
+              </label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Master number
+                <select id="registerMasterNumber">
+                  <option value="">None</option>
+                </select>
+              </label>
+              <label>
+                Master quantity
+                <input id="registerMasterQuantity" type="number" min="1" step="1" placeholder="Quantity to add">
+              </label>
+            </div>
+            <label>
+              Asset pictures
+              <input id="assetPhotos" type="file" accept="image/*" multiple>
+            </label>
+            <div id="assetPhotoPreview" class="asset-photo-preview" aria-label="Asset picture preview"></div>
+            <div class="grid-two">
+              <label>
+                Latitude
+                <input id="latitude" inputmode="decimal" placeholder="29.7604">
+              </label>
+              <label>
+                Longitude
+                <input id="longitude" inputmode="decimal" placeholder="-95.3698">
+              </label>
+            </div>
+            <div class="location-actions">
+              <button id="useLocationBtn" class="secondary" type="button">Use current location</button>
+              <a id="mapLink" class="text-link" href="#" target="_blank" rel="noreferrer">Open map</a>
+            </div>
+            <div id="locationProgress" class="gps-progress" role="progressbar" aria-label="GPS location progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+              <i></i>
+            </div>
+            <p id="locationMessage" class="form-message" role="status"></p>
+            <label>
+              Notes
+              <textarea id="notes" rows="4" placeholder="Condition, serial number, inspection notes"></textarea>
+            </label>
+            <button id="saveBtn" class="primary" type="submit">Save equipment</button>
+          </form>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="list" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Equipment register</h2>
+            <div class="list-filters">
+              <label>
+                Assigned job
+                <select id="jobFilter">
+                  <option value="__all">All jobs</option>
+                </select>
+              </label>
+              <label class="search-label">
+                Search
+                <input id="searchInput" placeholder="Number, tag, assignee">
+              </label>
+            </div>
+          </div>
+          <section id="equipmentTypeCounts" class="equipment-type-counts" aria-label="Filtered equipment type counts"></section>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Number</th>
+                  <th>Tag</th>
+                  <th>Status</th>
+                  <th>Assigned to Job</th>
+                  <th>Location</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="equipmentTable"></tbody>
+            </table>
+          </div>
+          <p id="emptyState" class="empty-state">No equipment found.</p>
+        </section>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Master numbers by job</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Master #</th>
+                  <th>Categories</th>
+                  <th>Qty</th>
+                </tr>
+              </thead>
+              <tbody id="equipmentMasterJobTable"></tbody>
+            </table>
+          </div>
+          <p id="equipmentMasterJobEmptyState" class="empty-state">No master numbers assigned to jobs yet.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="asset-lookup" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Asset lookup</h2>
+            <div class="list-filters">
+              <label class="search-label">
+                Asset number or QR code
+                <span class="scan-field">
+                  <input id="lookupSearchInput" autocomplete="off" placeholder="Asset number or QR code">
+                  <button id="lookupScanBtn" class="secondary scan-button" type="button">Scan</button>
+                </span>
+              </label>
+              <button id="lookupSearchBtn" class="primary" type="button">Find asset</button>
+            </div>
+          </div>
+          <div id="lookupQrScanner" class="qr-scanner" hidden>
+            <div class="qr-scanner-head">
+              <strong>Scan code</strong>
+              <button id="closeLookupScannerBtn" class="ghost" type="button">Close</button>
+            </div>
+            <video id="lookupQrVideo" playsinline muted></video>
+            <p id="lookupQrScannerMessage" class="form-message" role="status"></p>
+          </div>
+          <p id="lookupMessage" class="form-message" role="status"></p>
+          <div id="lookupResult" class="lookup-result" hidden></div>
+          <div id="lookupQrAssignPanel" class="lookup-assign" hidden>
+            <label>
+              Add QR code to this asset number
+              <span class="scan-field">
+                <input id="lookupQrInput" autocomplete="off" placeholder="Scan or type QR code">
+                <button id="lookupQrScanBtn" class="secondary scan-button" type="button">Scan QR</button>
+              </span>
+            </label>
+            <button id="saveLookupQrBtn" class="primary" type="button">Save QR code</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="inventory" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Inventory</h2>
+            <div class="list-filters">
+              <label class="search-label">
+                Asset number or QR code
+                <span class="scan-field">
+                  <input id="inventorySearchInput" autocomplete="off" placeholder="Asset number or QR code">
+                  <button id="inventoryScanBtn" class="secondary scan-button" type="button">Scan</button>
+                </span>
+              </label>
+              <button id="inventorySearchBtn" class="primary" type="button">Find asset</button>
+            </div>
+          </div>
+          <div id="inventoryQrScanner" class="qr-scanner" hidden>
+            <div class="qr-scanner-head">
+              <strong>Scan code</strong>
+              <button id="closeInventoryScannerBtn" class="ghost" type="button">Close</button>
+            </div>
+            <video id="inventoryQrVideo" playsinline muted></video>
+            <p id="inventoryQrScannerMessage" class="form-message" role="status"></p>
+          </div>
+          <p id="inventoryMessage" class="form-message" role="status"></p>
+          <div id="inventoryResult" class="lookup-result" hidden></div>
+          <div id="inventoryAssignPanel" class="lookup-assign" hidden>
+            <label>
+              Assign asset to job
+              <select id="inventoryJobSelect">
+                <option value="">Available</option>
+              </select>
+            </label>
+            <button id="saveInventoryJobBtn" class="primary" type="button">Save assignment</button>
+          </div>
+          <div id="inventoryQrAssignPanel" class="lookup-assign" hidden>
+            <label>
+              Add QR code to this asset number
+              <span class="scan-field">
+                <input id="inventoryQrInput" autocomplete="off" placeholder="Scan or type QR code">
+                <button id="inventoryQrAssignScanBtn" class="secondary scan-button" type="button">Scan QR</button>
+              </span>
+            </label>
+            <button id="saveInventoryQrBtn" class="primary" type="button">Save QR code</button>
+          </div>
+          <section class="lookup-assign inventory-master-panel">
+            <h3>Master quantity</h3>
+            <div class="grid-two">
+              <label>
+                Master number
+                <select id="inventoryMasterNumber">
+                  <option value="">Select</option>
+                </select>
+              </label>
+              <label>
+                Action
+                <select id="inventoryMasterAction">
+                  <option value="Add">Add quantity</option>
+                  <option value="Use">Reduce quantity</option>
+                </select>
+              </label>
+            </div>
+            <div class="grid-two">
+              <label>
+                Quantity
+                <input id="inventoryMasterQuantity" type="number" min="1" step="1" placeholder="1">
+              </label>
+              <label id="inventoryMasterJobLabel">
+                Job for reduced quantity
+                <select id="inventoryMasterJob">
+                  <option value="">Select</option>
+                </select>
+              </label>
+            </div>
+            <p class="form-message">Add quantity goes to Big Spring Yard. Reduce quantity must be assigned to a job.</p>
+            <button id="saveInventoryMasterBtn" class="primary" type="button">Save master quantity</button>
+            <p id="inventoryMasterMessage" class="form-message" role="status"></p>
+          </section>
+          <section class="lookup-assign inventory-yard-panel">
+            <div class="panel-title compact-title">
+              <h3>Big Spring Yard inventory checklist</h3>
+              <button id="finishInventoryBtn" class="primary" type="button">Finish inventory</button>
+            </div>
+            <div class="inventory-summary">
+              <article><span id="inventoryFoundCount">0</span><strong>Found</strong></article>
+              <article><span id="inventoryMissingCount">0</span><strong>Not scanned</strong></article>
+              <article><span id="inventoryUnexpectedCount">0</span><strong>Not in Yard before</strong></article>
+              <article><span id="inventoryMasterYardCount">0</span><strong>Master qty</strong></article>
+            </div>
+            <div id="inventoryFinishLinks" class="share-links" hidden></div>
+            <div class="grid-two inventory-lists">
+              <div>
+                <h4>Assets on Big Spring Yard</h4>
+                <div id="inventoryYardAssetList" class="inventory-checklist"></div>
+              </div>
+              <div>
+                <h4>Master numbers on Big Spring Yard</h4>
+                <div id="inventoryYardMasterList" class="inventory-checklist"></div>
+              </div>
+            </div>
+            <div id="inventoryUnexpectedPanel" hidden>
+              <h4>Scanned but not in Yard before inventory</h4>
+              <div id="inventoryUnexpectedList" class="inventory-checklist"></div>
+            </div>
+            <p id="inventoryFinishMessage" class="form-message" role="status"></p>
+          </section>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="maps" hidden>
+        <section class="map-layout">
+          <div class="panel map-panel">
+            <div class="panel-title">
+              <h2>Asset overview</h2>
+              <div class="map-tools">
+                <button id="mapZoomOutBtn" class="ghost map-zoom-button" type="button" title="Zoom out">-</button>
+                <button id="mapZoomInBtn" class="ghost map-zoom-button" type="button" title="Zoom in">+</button>
+                <a id="selectedMapLink" class="text-link" href="#" target="_blank" rel="noreferrer" aria-disabled="true">Open selected point</a>
+              </div>
+            </div>
+            <div id="assetMapStage" class="asset-map-stage" aria-label="Equipment locations Google Map">
+              <div id="googleMapCanvas" class="google-map-canvas"></div>
+              <p id="assetMapEmptyState" class="empty-state">No location points have coordinates yet.</p>
+              <p id="assetMapMessage" class="map-message" hidden></p>
+            </div>
+          </div>
+          <div class="panel map-list-panel">
+            <div class="panel-title">
+              <h2>Location points</h2>
+              <label class="map-filter-label">
+                Job
+                <select id="mapJobFilter">
+                  <option value="__all">All jobs</option>
+                </select>
+              </label>
+            </div>
+            <div id="mapPoints" class="map-points"></div>
+            <p id="mapEmptyState" class="empty-state">No location points have coordinates yet.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="history" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Asset location and job history</h2>
+            <div class="list-filters history-filters">
+              <label class="search-label">
+                Browse history
+                <span class="scan-field">
+                  <input id="historySearchInput" placeholder="Asset number, tag, or QR code">
+                  <button id="scanHistoryBtn" class="secondary scan-button" type="button">Scan QR</button>
+                </span>
+              </label>
+              <button id="refreshHistoryBtn" class="ghost" type="button">Refresh</button>
+            </div>
+          </div>
+          <div id="historyQrScanner" class="qr-scanner" hidden>
+            <div class="qr-scanner-head">
+              <strong>Scan history asset</strong>
+              <button id="closeHistoryScannerBtn" class="ghost" type="button">Close</button>
+            </div>
+            <video id="historyQrVideo" playsinline muted></video>
+            <p id="historyQrScannerMessage" class="form-message" role="status"></p>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Number</th>
+                  <th>Tag</th>
+                  <th>Assigned to Job</th>
+                  <th>Location</th>
+                  <th>Changed by</th>
+                </tr>
+              </thead>
+              <tbody id="historyTable"></tbody>
+            </table>
+          </div>
+          <p id="historyEmptyState" class="empty-state">No asset history found yet.</p>
+          <nav id="assetHistoryPager" class="table-pagination" aria-label="Asset history pages" hidden></nav>
+        </section>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Master number changes</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Master #</th>
+                  <th>Categories</th>
+                  <th>Change</th>
+                  <th>Qty</th>
+                  <th>Job</th>
+                  <th>Balance</th>
+                  <th>Changed by</th>
+                </tr>
+              </thead>
+              <tbody id="historyQuantityHistoryTable"></tbody>
+            </table>
+          </div>
+          <p id="historyQuantityHistoryEmptyState" class="empty-state">No master number changes found.</p>
+          <nav id="quantityHistoryPager" class="table-pagination" aria-label="Master number history pages" hidden></nav>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="job-audit" hidden>
+        <section class="audit-layout">
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2>Job audit</h2>
+            </div>
+            <form id="jobAuditForm">
+              <div class="grid-two">
+                <label>
+                  Date
+                  <input id="auditDate" type="date" required readonly>
+                </label>
+                <label>
+                  Current job
+                  <select id="auditJob" required>
+                    <option value="">Select</option>
+                  </select>
+                </label>
+              </div>
+              <input id="auditType" type="hidden" value="Asset">
+              <label id="auditAssetLabel">
+                Asset number or QR code
+                <span class="scan-field">
+                  <input id="auditAssetNumber" autocomplete="off" placeholder="Asset number">
+                  <button id="scanAuditAssetBtn" class="secondary scan-button" type="button">Scan QR</button>
+                </span>
+                <span id="auditAssetMessage" class="field-message" role="alert"></span>
+              </label>
+              <div id="auditQrScanner" class="qr-scanner" hidden>
+                <div class="qr-scanner-head">
+                  <strong>Scan audit asset</strong>
+                  <button id="closeAuditScannerBtn" class="ghost" type="button">Close</button>
+                </div>
+                <video id="auditQrVideo" playsinline muted></video>
+                <p id="auditQrScannerMessage" class="form-message" role="status"></p>
+              </div>
+              <div class="grid-two">
+                <label>
+                  Master number
+                  <select id="auditMasterNumber">
+                    <option value="">None</option>
+                  </select>
+                </label>
+                <label>
+                  Master quantity
+                  <input id="auditMasterQuantity" type="number" min="1" step="1" placeholder="Quantity used">
+                </label>
+              </div>
+              <div class="grid-two">
+                <label>
+                  Latitude
+                  <input id="auditLatitude" inputmode="decimal" required placeholder="29.7604">
+                </label>
+                <label>
+                  Longitude
+                  <input id="auditLongitude" inputmode="decimal" required placeholder="-95.3698">
+                </label>
+              </div>
+              <div class="location-actions">
+                <button id="useAuditLocationBtn" class="secondary" type="button">Use current location</button>
+                <a id="auditMapLink" class="text-link" href="#" target="_blank" rel="noreferrer">Open map</a>
+              </div>
+              <div id="auditLocationProgress" class="gps-progress" role="progressbar" aria-label="Audit GPS location progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden>
+                <i></i>
+              </div>
+              <p id="auditLocationMessage" class="form-message" role="status"></p>
+              <button class="primary" type="submit">Add to audit list</button>
+              <p id="jobAuditFormMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+
+          <div class="panel users-list-panel">
+            <div class="panel-title">
+              <h2>Audit list</h2>
+              <div class="inline-actions">
+                <button id="saveJobAuditListBtn" class="secondary" type="button">Save list</button>
+                <button id="refreshJobAuditBtn" class="ghost" type="button">Refresh</button>
+              </div>
+            </div>
+            <section class="audit-counts" aria-label="Job audit counts">
+              <article><span id="auditCrossingCount">0</span><strong>Crossings</strong></article>
+              <article><span id="auditPumpCount">0</span><strong>Pumps</strong></article>
+              <article><span id="auditPigAroundCount">0</span><strong>Pig Arounds</strong></article>
+              <article><span id="auditAssetCount">0</span><strong>Assets</strong></article>
+              <article><span id="auditMasterQuantityCount">0</span><strong>Master Qty</strong></article>
+            </section>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Job</th>
+                    <th>Type</th>
+                    <th>Asset</th>
+                    <th>Location</th>
+                  </tr>
+                </thead>
+                <tbody id="jobAuditTable"></tbody>
+              </table>
+            </div>
+            <p id="jobAuditEmptyState" class="empty-state">No job audit entries yet.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="current-audits" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Current audits</h2>
+            <button id="refreshCurrentAuditsBtn" class="ghost" type="button">Refresh</button>
+          </div>
+          <p id="currentAuditsMessage" class="form-message" role="status"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Saved</th>
+                  <th>Date</th>
+                  <th>Job</th>
+                  <th>Saved by</th>
+                  <th>Items</th>
+                  <th>Open</th>
+                </tr>
+              </thead>
+              <tbody id="currentAuditsTable"></tbody>
+            </table>
+          </div>
+          <p id="currentAuditsEmptyState" class="empty-state">No saved current audits yet.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="audit-history" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Audit history</h2>
+            <button id="refreshAuditHistoryBtn" class="ghost" type="button">Refresh</button>
+          </div>
+          <p id="auditHistoryMessage" class="form-message" role="status"></p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Saved</th>
+                  <th>Date</th>
+                  <th>Job</th>
+                  <th>Saved by</th>
+                  <th>Items</th>
+                  <th>Open</th>
+                </tr>
+              </thead>
+              <tbody id="auditHistoryTable"></tbody>
+            </table>
+          </div>
+          <p id="auditHistoryEmptyState" class="empty-state">No completed job audits yet.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="current-audit-detail" hidden>
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <div>
+              <h2 id="currentAuditDetailTitle">Current audit detail</h2>
+              <p id="currentAuditDetailMeta" class="form-message"></p>
+            </div>
+            <button id="backToCurrentAuditsBtn" class="ghost" type="button">Back</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Date</th>
+                  <th>Job</th>
+                  <th>Type</th>
+                  <th>Asset</th>
+                  <th>Location</th>
+                </tr>
+              </thead>
+              <tbody id="currentAuditDetailTable"></tbody>
+            </table>
+          </div>
+          <p id="currentAuditDetailEmptyState" class="empty-state">No audit detail found.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="users" hidden>
+        <section class="users-layout">
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2 id="userFormTitle">Add user</h2>
+              <button id="clearUserFormBtn" class="icon-button" type="button" title="New user">+</button>
+            </div>
+            <form id="userForm">
+              <input id="userOriginalUsername" type="hidden">
+              <div class="grid-two">
+                <label>
+                  Username
+                  <input id="userUsername" autocomplete="off" required>
+                </label>
+                <label>
+                  Full name
+                  <input id="userName" autocomplete="off" required>
+                </label>
+              </div>
+              <div class="grid-two">
+                <label>
+                  Role
+                  <select id="userRole" required>
+                    <option>Admin</option>
+                    <option>Manager</option>
+                    <option>Viewer</option>
+                    <option>Tracker Viewer</option>
+                    <option>Shop Viewer</option>
+                    <option>Scheduler</option>
+                    <option>Technician</option>
+                  </select>
+                </label>
+                <label>
+                  Password
+                  <input id="userPassword" type="password" autocomplete="new-password" placeholder="Leave blank to keep current">
+                </label>
+              </div>
+              <button class="primary" type="submit">Save user</button>
+              <p id="userFormMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+
+          <div class="panel users-list-panel">
+            <div class="panel-title">
+              <h2>User access</h2>
+            </div>
+            <div class="table-wrap">
+              <table class="users-table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTable"></tbody>
+              </table>
+            </div>
+            <p id="usersEmptyState" class="empty-state">No users found.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="quantity-assets" hidden>
+        <section class="users-layout">
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2>Quantity setup</h2>
+            </div>
+            <form id="quantityAssetSetupForm">
+              <label>
+                Categories
+                <select id="quantityAssetCategory" required multiple size="6">
+                </select>
+              </label>
+              <label>
+                Master number
+                <input id="quantityAssetMasterNumber" autocomplete="off" required placeholder="9000">
+              </label>
+              <button class="primary" type="submit">Save master categories</button>
+              <p id="quantityAssetSetupMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2>Add or use quantity</h2>
+            </div>
+            <form id="quantityAssetAdjustForm">
+              <label>
+                Master number
+                <select id="quantityAssetAdjustCategory" required>
+                  <option value="">Select</option>
+                </select>
+              </label>
+              <div class="grid-two">
+                <label>
+                  Action
+                  <select id="quantityAssetAction" required>
+                    <option value="Add">Add quantity</option>
+                    <option value="Use">Use on job</option>
+                  </select>
+                </label>
+                <label>
+                  Quantity
+                  <input id="quantityAssetAmount" type="number" min="1" step="1" required placeholder="1">
+                </label>
+              </div>
+              <label id="quantityAssetJobLabel">
+                Job
+                <select id="quantityAssetJob">
+                  <option value="">Select</option>
+                </select>
+              </label>
+              <button class="primary" type="submit">Save quantity change</button>
+              <p id="quantityAssetAdjustMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel list-panel">
+          <div class="panel-title">
+            <h2>Master quantity list</h2>
+            <button id="refreshQuantityAssetsBtn" class="secondary" type="button">Refresh</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Master #</th>
+                  <th>Categories</th>
+                  <th>Quantity</th>
+                  <th>Updated</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="quantityAssetsTable"></tbody>
+            </table>
+          </div>
+          <p id="quantityAssetsEmptyState" class="empty-state">No quantity assets found.</p>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="categories" hidden>
+        <section class="users-layout">
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2>Add category</h2>
+            </div>
+            <form id="categoryForm">
+              <label>
+                Category name
+                <input id="categoryName" autocomplete="off" required>
+              </label>
+              <button class="primary" type="submit">Save category</button>
+              <p id="categoryFormMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+
+          <div class="panel users-list-panel">
+            <div class="panel-title">
+              <h2>Dropdown categories</h2>
+            </div>
+            <div id="categoriesList" class="category-list"></div>
+            <p id="categoriesEmptyState" class="empty-state">No categories found.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view" data-page-view="jobs" hidden>
+        <section class="users-layout">
+          <div class="panel user-form-panel">
+            <div class="panel-title">
+              <h2>Add job value</h2>
+            </div>
+            <form id="jobForm">
+              <label>
+                Job name
+                <input id="jobName" autocomplete="off" required>
+              </label>
+              <button class="primary" type="submit">Save job</button>
+              <p id="jobFormMessage" class="form-message" role="status"></p>
+            </form>
+          </div>
+
+          <div class="panel users-list-panel">
+            <div class="panel-title">
+              <h2>Assigned to Job dropdown</h2>
+            </div>
+            <div id="jobsList" class="category-list"></div>
+            <p id="jobsEmptyState" class="empty-state">No job values found.</p>
+          </div>
+        </section>
+      </section>
+    </section>
+  </main>
+
+  <div id="assetPictureViewer" class="picture-viewer" role="dialog" aria-modal="true" aria-labelledby="assetPictureViewerTitle" hidden>
+    <section class="picture-viewer-panel">
+      <div class="picture-viewer-head">
+        <h2 id="assetPictureViewerTitle">Asset picture</h2>
+        <button id="closeAssetPictureViewerBtn" class="ghost" type="button">Close</button>
+      </div>
+      <img id="assetPictureViewerImage" alt="Asset picture">
+    </section>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="jsQR.js"></script>
+  <script src="app.js?v=255"></script>
+</body>
+</html>

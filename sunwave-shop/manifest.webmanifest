@@ -1,0 +1,17 @@
+{
+  "name": "Sunwave Shop",
+  "short_name": "Shop",
+  "description": "Sunwave Shop admin workspace.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2f4f1",
+  "theme_color": "#7b1e3a",
+  "icons": [
+    {
+      "src": "../icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

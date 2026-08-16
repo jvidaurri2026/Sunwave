@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#7b1e3a">
+  <title>Sunwave Shop</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css?v=258">
+</head>
+<body>
+  <main class="shop-shell">
+    <header class="shop-header">
+      <div class="shop-brand">
+        <span>SS</span>
+        <div>
+          <strong>Sunwave Shop</strong>
+          <small id="shopUser">Admin workspace</small>
+        </div>
+      </div>
+      <a id="shopExitLink" href="../index.html#projects">Choose project</a>
+    </header>
+
+    <section id="shopWorkspace" class="shop-workspace" hidden>
+      <nav class="shop-menu" aria-label="Shop menu">
+        <button class="active" type="button" data-shop-page="dashboard" data-admin-only data-shop-readable>Dashboard</button>
+        <button type="button" data-shop-page="orders-history" data-admin-only data-shop-readable>Orders History</button>
+        <button type="button" data-shop-page="current-inventory" data-admin-only data-shop-readable>Current Inventory</button>
+        <button type="button" data-shop-page="tire-inventory" data-admin-only data-shop-readable>Tire Inventory</button>
+        <button type="button" data-shop-page="parts" data-admin-only>Parts Inventory</button>
+        <button type="button" data-shop-page="smart-part-intake" data-admin-only>Smart Part Intake</button>
+        <button type="button" data-shop-page="unit-types" data-admin-only>Units</button>
+        <button type="button" data-shop-page="repair-codes" data-admin-only>Repair Codes</button>
+        <button type="button" data-shop-page="whatsapp-settings" data-admin-only>WhatsApp Settings</button>
+        <button type="button" data-shop-page="repair-orders" data-admin-only>Repair Order</button>
+        <button type="button" data-shop-page="out-of-service" data-admin-only>Out of Service</button>
+        <button type="button" data-shop-page="saved-repair-orders" data-admin-only data-shop-readable>Saved Repair Orders</button>
+        <button type="button" data-shop-page="unit-repair-history" data-admin-only data-shop-readable>Unit Repair History</button>
+        <button type="button" data-shop-page="schedule-service" data-scheduler-only>Schedule Service</button>
+        <button type="button" data-shop-page="scheduled-repairs">Scheduled Repairs</button>
+      </nav>
+      <section id="shopDashboardPage" class="shop-dashboard" data-shop-page-view="dashboard" data-admin-only data-shop-readable>
+        <div class="dashboard-heading">
+          <div><h1>Service Dashboard</h1><p>Current workload, completed service, and parts spending.</p></div>
+          <div class="dashboard-report-actions">
+            <span id="dashboardUpdatedAt"></span>
+            <button id="shareDashboardWhatsapp" type="button" data-shop-admin-action>Send Today's Operations by WhatsApp</button>
+          </div>
+        </div>
+        <p id="dashboardWhatsappMessage" class="form-message" role="status"></p>
+        <section class="dashboard-metrics" aria-label="Service metrics">
+          <article><span>Open services</span><strong id="dashboardOpenServices">0</strong></article>
+          <article><span>Scheduled</span><strong id="dashboardScheduled">0</strong></article>
+          <article><span>Working on it</span><strong id="dashboardWorking">0</strong></article>
+          <article><span>Completed</span><strong id="dashboardCompleted">0</strong></article>
+          <article><span>Cancelled</span><strong id="dashboardCancelled">0</strong></article>
+          <article><span>Out of service</span><strong id="dashboardOutOfService">0</strong></article>
+          <article><span>Parts expense</span><strong id="dashboardPartsExpense">$0.00</strong></article>
+          <article><span>Other expenses</span><strong id="dashboardOtherExpense">$0.00</strong></article>
+        </section>
+        <section class="dashboard-charts">
+          <article class="shop-panel dashboard-chart">
+            <div class="panel-heading"><h2>Service Status</h2><span id="dashboardServiceTotal">0 services</span></div>
+            <div id="dashboardStatusChart" class="horizontal-chart"></div>
+          </article>
+          <article class="shop-panel dashboard-chart">
+            <div class="panel-heading expense-heading">
+              <div><h2>Parts Expenses</h2><span id="dashboardExpenseCaption">Last 6 months</span></div>
+              <div class="expense-tabs" role="tablist" aria-label="Parts expense view">
+                <button id="dashboardExpenseMonthTab" class="active" type="button" role="tab" aria-selected="true">By Month</button>
+                <button id="dashboardExpenseVendorTab" type="button" role="tab" aria-selected="false">By Vendor</button>
+                <button id="dashboardExpenseInventoryTab" type="button" role="tab" aria-selected="false">Current Inventory</button>
+              </div>
+            </div>
+            <div id="dashboardExpenseChart" class="expense-chart"></div>
+            <section id="dashboardPartsDrilldown" class="parts-drilldown" aria-live="polite" hidden>
+              <div class="parts-drilldown-heading">
+                <h3 id="dashboardPartsDrilldownTitle">Parts used</h3>
+                <span id="dashboardPartsDrilldownTotal"></span>
+              </div>
+              <div id="dashboardPartsDrilldownChart" class="parts-quantity-chart"></div>
+            </section>
+          </article>
+        </section>
+        <section class="shop-panel dashboard-recent">
+          <div class="panel-heading"><h2>Today's Repair Orders &amp; Open Work</h2><span id="dashboardRecentTotal">0 today, 0 working</span></div>
+          <div class="table-wrap"><table><thead><tr><th>RO</th><th>Status</th><th>Original schedule</th><th>Current schedule</th><th>Working</th><th>Completed</th><th>Asset</th><th>Mechanic</th><th>Repair codes</th><th>Parts used</th><th>Parts expense</th></tr></thead><tbody id="dashboardRecentOrders"></tbody></table></div>
+          <p id="dashboardRecentEmpty" class="empty-state">No completed or working repair orders today.</p>
+        </section>
+        <section class="shop-panel dashboard-recent">
+          <div class="panel-heading"><h2>Units Out of Service</h2><span id="dashboardOutOfServiceTotal">0 active</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Unit</th><th>Out date</th><th>ETA to fix</th><th>Status</th><th>Issue</th><th>Third-party shop</th><th>Send date</th></tr></thead><tbody id="dashboardOutOfServiceList"></tbody></table></div>
+          <p id="dashboardOutOfServiceEmpty" class="empty-state">No units are currently out of service.</p>
+        </section>
+        <section class="shop-panel dashboard-part-orders">
+          <div class="panel-heading"><h2>Parts Ordered or Picked Up Today</h2><span id="dashboardPartOrderTotal">0 records</span></div>
+          <form id="dashboardPartOrderForm" class="dashboard-part-order-form" data-shop-admin-action>
+            <label>Expense type<select id="dashboardPartPurchaseType"><option value="Unit Part">For a Unit</option><option value="Tire Inventory">Tire Inventory</option><option value="Job Material">Material for Jobs</option></select></label>
+            <label id="dashboardPartOrderUnitLabel">Unit<select id="dashboardPartOrderUnit"><option value="">Select unit</option></select></label>
+            <label id="dashboardPartOrderNumberLabel">Part number<input id="dashboardPartOrderNumber" autocomplete="off"></label>
+            <label><span id="dashboardPartDescriptionLabel">Part description</span><input id="dashboardPartOrderDescription" required autocomplete="off"></label>
+            <label>Vendor<input id="dashboardPartOrderVendor" required autocomplete="organization"></label>
+            <label>Quantity<input id="dashboardPartOrderQuantity" type="number" min="1" step="1" value="1" required></label>
+            <label>Unit price<input id="dashboardPartOrderPrice" type="number" min="0" step="0.01" inputmode="decimal" value="0.00" required></label>
+            <label>Order date<input id="dashboardPartOrderDate" type="date" required></label>
+            <label class="toggle-setting part-pickup-toggle">
+              <input id="dashboardPartPickedUp" type="checkbox" role="switch">
+              <span class="toggle-control" aria-hidden="true"></span>
+              <span>Part was picked up</span>
+            </label>
+            <label id="dashboardPartPickupDateLabel" hidden>Pickup date<input id="dashboardPartPickupDate" type="date"></label>
+            <button type="submit">Save parts activity</button>
+          </form>
+          <p id="dashboardPartOrderMessage" class="form-message" role="status"></p>
+          <div class="parts-order-columns">
+            <section>
+              <div class="panel-heading"><h3>Waiting for Order</h3><span id="dashboardWaitingPartsTotal">0 waiting</span></div>
+              <div class="table-wrap"><table><thead><tr><th>Type</th><th>Unit</th><th>Material or part</th><th>Vendor</th><th>Qty</th><th>Expense</th><th>Order date</th><th>Entered by</th><th>Receive</th></tr></thead><tbody id="dashboardWaitingParts"></tbody></table></div>
+              <p id="dashboardWaitingPartsEmpty" class="empty-state">No parts are waiting for an order.</p>
+            </section>
+            <section>
+              <div class="panel-heading"><h3>Received Parts</h3><span id="dashboardReceivedPartsTotal">0 received</span></div>
+              <div class="table-wrap"><table><thead><tr><th>Received date</th><th>Expense type</th><th>Unit</th><th>Material or part</th><th>Vendor</th><th>Qty</th><th>Expense</th><th>Order date</th><th>Received by</th></tr></thead><tbody id="dashboardReceivedParts"></tbody></table></div>
+              <p id="dashboardReceivedPartsEmpty" class="empty-state">No received parts have been saved.</p>
+            </section>
+          </div>
+        </section>
+      </section>
+      <section id="ordersHistoryPage" class="current-inventory-page" data-shop-page-view="orders-history" data-admin-only data-shop-readable hidden>
+        <div class="dashboard-heading">
+          <div><h1>Orders History</h1><p>Parts and job materials ordered, waiting, and received.</p></div>
+          <span id="ordersHistoryUpdatedAt"></span>
+        </div>
+        <section class="inventory-value-summary" aria-label="Order history totals">
+          <article><span>Orders</span><strong id="ordersHistoryCount">0</strong></article>
+          <article><span>Waiting</span><strong id="ordersHistoryWaiting">0</strong></article>
+          <article><span>Received</span><strong id="ordersHistoryReceived">0</strong></article>
+          <article><span>Filtered value</span><strong id="ordersHistoryValue">$0.00</strong></article>
+        </section>
+        <section class="shop-panel orders-history-panel">
+          <div class="orders-history-filters">
+            <label>Search<input id="ordersHistorySearch" type="search" placeholder="Part, material, or unit"></label>
+            <label>Status<select id="ordersHistoryStatus"><option value="__all">All statuses</option><option value="Waiting for Order">Waiting for Order</option><option value="Order Received">Order Received</option></select></label>
+            <label>Expense type<select id="ordersHistoryType"><option value="__all">All expense types</option><option value="Unit Part">For a Unit</option><option value="Tire Inventory">Tire Inventory</option><option value="Job Material">Material for Jobs</option></select></label>
+            <label>From date<input id="ordersHistoryFrom" type="date"></label>
+            <label>To date<input id="ordersHistoryTo" type="date"></label>
+          </div>
+          <div class="panel-heading"><h2>Order Records</h2><span id="ordersHistoryTotal">0 records</span></div>
+          <div class="table-wrap"><table><thead><tr><th>Status</th><th>Expense type</th><th>Unit</th><th>Part number</th><th>Description</th><th>Vendor</th><th>Qty</th><th>Unit price</th><th>Total</th><th>Order date</th><th>Pickup date</th><th>Entered by</th><th>Updated by</th></tr></thead><tbody id="ordersHistoryList"></tbody></table></div>
+          <p id="ordersHistoryEmpty" class="empty-state">No order records match the selected filters.</p>
+        </section>
+      </section>
+      <section id="outOfServicePage" class="parts-layout" data-shop-page-view="out-of-service" data-admin-only hidden>
+        <form id="outOfServiceForm" class="shop-panel part-form">
+          <h1>Put Unit Out of Service</h1>
+          <label>
+            Unit
+            <select id="outOfServiceAsset" required>
+              <option value="">Select unit</option>
+            </select>
+          </label>
+          <label>
+            Out-of-service date
+            <input id="outOfServiceDate" type="date" required>
+          </label>
+          <label>
+            ETA to fix
+            <input id="outOfServiceEta" type="date" required>
+          </label>
+          <label class="toggle-setting">
+            <input id="outOfServiceNoEta" type="checkbox" role="switch">
+            <span class="toggle-control" aria-hidden="true"></span>
+            <span>No ETA available</span>
+          </label>
+          <label>
+            Issue
+            <textarea id="outOfServiceIssue" rows="4" required></textarea>
+          </label>
+          <label>
+            Repair status
+            <select id="outOfServiceStatus" required>
+              <option value="Diagnosing">Diagnosing</option>
+              <option value="Waiting for Parts">Waiting for Parts</option>
+              <option value="Needs 3rd Party">Needs 3rd Party</option>
+              <option value="Repairing at 3rd Party">Repairing at 3rd Party</option>
+              <option value="Sent to Auction">Sent to Auction</option>
+            </select>
+          </label>
+          <div id="outOfServiceThirdPartyFields" class="conditional-fields" hidden>
+            <label>
+              Third-party shop
+              <input id="outOfServiceThirdPartyShop" autocomplete="organization">
+            </label>
+            <label>
+              Date to be sent
+              <input id="outOfServiceThirdPartyDate" type="date">
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="submit">Save out-of-service report</button>
+          </div>
+          <p id="outOfServiceMessage" class="form-message" role="status"></p>
+        </form>
+
+        <section class="shop-panel parts-list">
+          <div class="panel-heading"><h2>Out-of-Service History</h2><span id="outOfServiceTotal">0 reports</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Unit</th><th>Out date</th><th>ETA to fix</th><th>Issue</th><th>Status</th><th>Status details</th><th>Updated by</th><th>Action</th></tr></thead>
+              <tbody id="outOfServiceList"></tbody>
+            </table>
+          </div>
+          <p id="outOfServiceEmpty" class="empty-state">No out-of-service reports yet.</p>
+        </section>
+      </section>
+      <section id="whatsappSettingsPage" class="settings-page" data-shop-page-view="whatsapp-settings" data-admin-only hidden>
+        <form id="whatsappSettingsForm" class="shop-panel settings-form">
+          <div class="panel-heading"><h1>WhatsApp Settings</h1><span id="whatsappTokenStatus">Token not configured</span></div>
+          <label class="checkbox-setting">
+            <input id="whatsappEnabled" type="checkbox">
+            Enable WhatsApp connection
+          </label>
+          <label>
+            Access token
+            <input id="whatsappAccessToken" type="password" autocomplete="off" placeholder="Leave blank to keep saved token">
+          </label>
+          <label>
+            Phone Number ID
+            <input id="whatsappPhoneNumberId" inputmode="numeric" autocomplete="off">
+          </label>
+          <label>
+            Recipient number
+            <input id="whatsappRecipientNumber" type="tel" autocomplete="tel" placeholder="Country code and phone number">
+          </label>
+          <label>
+            Graph API version
+            <input id="whatsappApiVersion" autocomplete="off" value="v23.0">
+          </label>
+          <label>
+            Webhook callback URL
+            <input id="whatsappCallbackUrl" readonly>
+          </label>
+          <label>
+            Webhook verify token
+            <input id="whatsappVerifyToken" type="password" autocomplete="off" placeholder="Leave blank to keep saved verify token">
+          </label>
+          <span id="whatsappVerifyTokenStatus">Verify token not configured</span>
+          <div class="form-actions">
+            <button type="submit">Save WhatsApp settings</button>
+            <button id="testWhatsappConnectionButton" class="secondary-button" type="button">Send test message</button>
+          </div>
+          <p id="whatsappSettingsMessage" class="form-message" role="status"></p>
+        </form>
+      </section>
+      <section id="currentInventoryPage" class="current-inventory-page" data-shop-page-view="current-inventory" data-admin-only data-shop-readable hidden>
+        <div class="dashboard-heading">
+          <div><h1>Current Inventory</h1><p>Parts currently on hand and their inventory value.</p></div>
+          <span id="currentInventoryUpdatedAt"></span>
+        </div>
+        <section class="inventory-value-summary" aria-label="Current inventory totals">
+          <article><span>Part numbers</span><strong id="currentInventoryPartCount">0</strong></article>
+          <article><span>Units in stock</span><strong id="currentInventoryQuantity">0</strong></article>
+          <article><span>Inventory value</span><strong id="currentInventoryValue">$0.00</strong></article>
+        </section>
+        <section class="shop-panel">
+          <div class="panel-heading"><h2>Quantity and Value</h2><span>Current stock</span></div>
+          <div class="inventory-chart-legend"><span><i class="quantity-key"></i>Quantity</span><span><i class="value-key"></i>Value</span></div>
+          <div id="currentInventoryChart" class="inventory-part-rows current-inventory-chart"></div>
+        </section>
+        <section class="shop-panel current-inventory-table">
+          <div class="panel-heading"><h2>Inventory Details</h2><span id="currentInventoryTableTotal">0 parts</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Part number</th><th>Description</th><th>Vendor</th><th>Unit price</th><th>Quantity</th><th>Total value</th></tr></thead>
+              <tbody id="currentInventoryTable"></tbody>
+            </table>
+          </div>
+          <p id="currentInventoryEmpty" class="empty-state">No parts are currently in inventory.</p>
+        </section>
+      </section>
+      <section id="tireInventoryPage" class="current-inventory-page" data-shop-page-view="tire-inventory" data-admin-only data-shop-readable hidden>
+        <div class="dashboard-heading">
+          <div><h1>Tire Inventory</h1><p>Current tire stock, sizes, and inventory value.</p></div>
+          <span id="tireInventoryUpdatedAt"></span>
+        </div>
+        <section class="inventory-value-summary" aria-label="Tire inventory totals">
+          <article><span>Tire part numbers</span><strong id="tireInventoryPartCount">0</strong></article>
+          <article><span>Tires in stock</span><strong id="tireInventoryQuantity">0</strong></article>
+          <article><span>Tire inventory value</span><strong id="tireInventoryValue">$0.00</strong></article>
+        </section>
+        <section class="shop-panel">
+          <div class="panel-heading"><h2>Quantity by Unit Type</h2><span id="tireInventoryChartTotal">0 tires</span></div>
+          <div id="tireInventoryChart" class="inventory-part-rows current-inventory-chart"></div>
+        </section>
+        <section class="shop-panel current-inventory-table">
+          <div class="panel-heading"><h2>Tire Details</h2><span id="tireInventoryTableTotal">0 parts</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Part number / Size</th><th>Description</th><th>Vendor</th><th>Years</th><th>Unit price</th><th>Quantity</th><th>Total value</th></tr></thead>
+              <tbody id="tireInventoryTable"></tbody>
+            </table>
+          </div>
+          <p id="tireInventoryEmpty" class="empty-state">No tires are currently in inventory.</p>
+        </section>
+      </section>
+      <section id="partsPage" class="parts-layout" data-shop-page-view="parts" hidden>
+        <form id="partForm" class="shop-panel part-form">
+          <h1>Parts Inventory</h1>
+          <label>
+            Part number
+            <input id="partNumber" autocomplete="off" required>
+          </label>
+          <label>
+            Part description
+            <textarea id="partDescription" rows="3" required></textarea>
+          </label>
+          <label>
+            Vendor
+            <input id="partVendor" autocomplete="organization" required>
+          </label>
+          <label>
+            Price
+            <input id="partPrice" type="number" min="0" step="0.01" inputmode="decimal" required>
+          </label>
+          <label>
+            Years
+            <select id="partYear" multiple size="5" required></select>
+          </label>
+          <label>
+            Unit type
+            <select id="partUnitType" required>
+              <option value="">Select unit type</option>
+            </select>
+          </label>
+          <label id="partFuelTypeField" hidden>
+            Fuel type
+            <select id="partFuelType" required>
+              <option value="">Select fuel type</option>
+              <option value="Diesel">Diesel</option>
+              <option value="Gasoline">Gasoline</option>
+              <option value="Diesel and Gasoline">Diesel and Gasoline</option>
+            </select>
+          </label>
+          <label>
+            Service code
+            <select id="partServiceCode" required>
+              <option value="">Select service code</option>
+            </select>
+          </label>
+          <label>
+            Quantity to add
+            <input id="partQuantity" type="number" min="1" step="1" inputmode="numeric" required>
+          </label>
+          <div class="form-actions">
+            <button id="partSubmitButton" type="submit">Save part</button>
+            <button id="partCancelButton" class="secondary-button" type="button" hidden>Cancel edit</button>
+          </div>
+          <p id="partMessage" class="form-message" role="status"></p>
+        </form>
+
+        <section class="shop-panel parts-list">
+          <div class="panel-heading">
+            <h2>Parts</h2>
+            <span id="partsTotal">0 parts</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Part number</th>
+                  <th>Description</th>
+                  <th>Vendor</th>
+                  <th>Price</th>
+                  <th>Years</th>
+                  <th>Unit type</th>
+                  <th>Fuel type</th>
+                  <th>Service code</th>
+                  <th>Quantity</th>
+                  <th>Updated by</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="partsTable"></tbody>
+            </table>
+          </div>
+          <p id="partsEmpty" class="empty-state">No parts added yet.</p>
+        </section>
+      </section>
+
+      <section id="smartPartIntakePage" class="smart-part-layout" data-shop-page-view="smart-part-intake" data-admin-only hidden>
+        <section class="shop-panel smart-part-lookup-panel">
+          <div class="panel-heading">
+            <div><h1>Smart Part Intake</h1><p>Scan a box barcode or enter the printed part number.</p></div>
+            <span id="smartPartLookupState">Ready</span>
+          </div>
+          <form id="smartPartLookupForm" class="smart-part-search">
+            <label>
+              Barcode or part number
+              <input id="smartPartLookupInput" autocomplete="off" inputmode="text" required>
+            </label>
+            <div class="form-actions">
+              <button type="submit">Search</button>
+              <button id="smartPartScanButton" class="secondary-button" type="button">Scan barcode</button>
+              <button id="smartPartStopScanButton" class="secondary-button" type="button" hidden>Stop camera</button>
+            </div>
+          </form>
+          <div id="smartPartScanner" class="smart-part-scanner" hidden>
+            <video id="smartPartScanVideo" playsinline muted></video>
+            <div class="smart-part-scan-frame" aria-hidden="true"></div>
+          </div>
+          <p id="smartPartLookupMessage" class="form-message" role="status"></p>
+          <div id="smartPartMatches" class="smart-part-matches"></div>
+        </section>
+
+        <form id="smartPartForm" class="shop-panel smart-part-form">
+          <div class="panel-heading"><h2>Review and Register</h2><span id="smartPartExistingStatus">New part</span></div>
+          <div class="smart-part-fields">
+            <label>Part number<input id="smartPartNumber" autocomplete="off" required></label>
+            <label>Part description<textarea id="smartPartDescription" rows="3" required></textarea></label>
+            <label>Vendor<input id="smartPartVendor" autocomplete="organization" required></label>
+            <label>Price<input id="smartPartPrice" type="number" min="0" step="0.01" inputmode="decimal" required></label>
+            <label>Years<select id="smartPartYears" multiple size="5" required></select></label>
+            <label>Unit type<select id="smartPartUnitType" required><option value="">Select unit type</option></select></label>
+            <label id="smartPartFuelTypeField" hidden>Fuel type<select id="smartPartFuelType"><option value="">Select fuel type</option><option>Diesel</option><option>Gasoline</option><option>Diesel and Gasoline</option></select></label>
+            <label>Service code<select id="smartPartServiceCode" required><option value="">Select service code</option></select></label>
+            <label>Quantity to add<input id="smartPartQuantity" type="number" min="1" step="1" inputmode="numeric" value="1" required></label>
+          </div>
+          <label class="smart-part-confirmation"><input id="smartPartCompatibilityConfirmed" type="checkbox" required> Compatibility, model years, and price were reviewed before registration.</label>
+          <div class="form-actions">
+            <button id="smartPartCompatibilitySearchButton" class="secondary-button" type="button">Check compatibility online</button>
+            <button type="submit">Register part</button>
+            <button id="smartPartClearButton" class="secondary-button" type="button">Clear</button>
+          </div>
+          <p id="smartPartSaveMessage" class="form-message" role="status"></p>
+        </form>
+      </section>
+
+      <section id="unitTypesPage" class="parts-layout" data-shop-page-view="unit-types" hidden>
+        <form id="unitTypeForm" class="shop-panel part-form">
+          <h1 id="unitTypeFormTitle">Add Unit</h1>
+          <label>
+            Asset number
+            <input id="unitAssetNumber" autocomplete="off" required>
+          </label>
+          <label>
+            Make
+            <input id="unitMake" autocomplete="off" required>
+          </label>
+          <label>
+            Fuel type
+            <select id="unitFuelType" required>
+              <option value="">Select fuel type</option>
+              <option value="Diesel">Diesel</option>
+              <option value="Gasoline">Gasoline</option>
+              <option value="Diesel and Gasoline">Diesel and Gasoline</option>
+            </select>
+          </label>
+          <label>
+            Year
+            <input id="unitYear" type="number" min="1900" max="2200" step="1" inputmode="numeric" required>
+          </label>
+          <label>
+            Unit type
+            <input id="unitTypeName" autocomplete="off" required>
+          </label>
+          <label>
+            Model
+            <input id="unitModel" autocomplete="off" required>
+          </label>
+          <label>
+            VIN
+            <input id="unitVin" autocomplete="off" required>
+          </label>
+          <label>
+            Tire size
+            <input id="unitTireSize" autocomplete="off" required>
+          </label>
+          <div class="form-actions">
+            <button id="unitTypeSubmitButton" type="submit">Save unit</button>
+            <button id="unitTypeCancelButton" class="secondary-button" type="button" hidden>Cancel</button>
+          </div>
+          <p id="unitTypeMessage" class="form-message" role="status"></p>
+        </form>
+
+        <section class="shop-panel parts-list">
+          <div class="panel-heading">
+            <h2>Units</h2>
+            <span id="unitTypesTotal">0 units</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Asset number</th>
+                  <th>Make</th>
+                  <th>Fuel type</th>
+                  <th>Year</th>
+                  <th>Unit type</th>
+                  <th>Model</th>
+                  <th>VIN</th>
+                  <th>Tire size</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="unitTypesList"></tbody>
+            </table>
+          </div>
+          <p id="unitTypesEmpty" class="empty-state">No units added yet.</p>
+        </section>
+      </section>
+
+      <section id="repairCodesPage" class="parts-layout" data-shop-page-view="repair-codes" hidden>
+        <form id="repairCodeForm" class="shop-panel part-form">
+          <h1 id="repairCodeFormTitle">Add Repair Code</h1>
+          <label>
+            Code
+            <input id="repairCode" autocomplete="off" required>
+          </label>
+          <label>
+            Description
+            <textarea id="repairCodeDescription" rows="5" required></textarea>
+          </label>
+          <label>
+            Labor time (hours)
+            <input id="repairCodeLaborHours" type="number" min="0" step="0.25" inputmode="decimal" required>
+          </label>
+          <label class="checkbox-setting">
+            <input id="repairCodeRequiresPosition" type="checkbox">
+            Requires asset position
+          </label>
+          <fieldset class="repair-code-option-editor">
+            <legend>Checkbox options</legend>
+            <div id="repairCodeOptionRows"></div>
+            <button id="addRepairCodeOptionButton" class="secondary-button" type="button">Add checkbox option</button>
+          </fieldset>
+          <div class="form-actions">
+            <button id="repairCodeSubmitButton" type="submit">Save repair code</button>
+            <button id="repairCodeCancelButton" class="secondary-button" type="button" hidden>Cancel</button>
+          </div>
+          <p id="repairCodeMessage" class="form-message" role="status"></p>
+        </form>
+
+        <section class="shop-panel parts-list">
+          <div class="panel-heading">
+            <h2>Repair Codes</h2>
+            <span id="repairCodesTotal">0 codes</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Code</th><th>Description</th><th>Labor hours</th><th>Asset position</th><th>Action</th></tr></thead>
+              <tbody id="repairCodesList"></tbody>
+            </table>
+          </div>
+          <p id="repairCodesEmpty" class="empty-state">No repair codes added yet.</p>
+        </section>
+      </section>
+
+      <section id="repairOrdersPage" class="repair-order-layout" data-shop-page-view="repair-orders" hidden>
+        <form id="repairOrderForm" class="shop-panel repair-order-form">
+          <h1>Repair Order</h1>
+          <div class="form-grid">
+            <label>
+              Date
+              <input id="repairOrderDate" type="date" required>
+            </label>
+            <label>
+              Location
+              <select id="repairOrderLocation" required>
+                <option value="">Select location</option>
+                <option value="Big Spring">Big Spring</option>
+                <option value="Midland">Midland</option>
+              </select>
+            </label>
+            <label>
+              Mechanic name
+              <input id="repairOrderTechnician" readonly>
+            </label>
+            <label>
+              Driver name
+              <input id="repairOrderDriverName" autocomplete="name" required>
+            </label>
+            <label>
+              Asset number
+              <select id="repairOrderAsset" required>
+                <option value="">Select asset</option>
+              </select>
+            </label>
+            <label>
+              Asset mileage
+              <input id="repairOrderMileage" type="number" min="0" step="0.1" inputmode="decimal" required>
+            </label>
+            <label>
+              Asset hours
+              <input id="repairOrderHours" type="number" min="0" step="0.1" inputmode="decimal" required>
+            </label>
+          </div>
+          <fieldset>
+            <legend>Repair codes</legend>
+            <div id="repairOrderCodes" class="repair-code-options"></div>
+          </fieldset>
+          <fieldset>
+            <legend>Parts used</legend>
+            <div id="repairOrderParts" class="repair-parts-options"></div>
+            <div class="parts-used-total">Total price: <strong id="repairOrderPartsTotal">$0.00</strong></div>
+          </fieldset>
+          <label>
+            Description of job done on the asset
+            <textarea id="repairOrderDescription" rows="6" required></textarea>
+          </label>
+          <button type="submit">Save repair order</button>
+          <p id="repairOrderMessage" class="form-message" role="status"></p>
+        </form>
+
+      </section>
+
+      <section id="savedRepairOrdersPage" class="shop-panel repair-orders-list" data-shop-page-view="saved-repair-orders" hidden>
+          <div class="saved-orders-heading">
+            <div>
+              <h1>Saved Repair Orders</h1>
+              <span id="repairOrdersTotal">0 orders</span>
+            </div>
+            <div class="saved-orders-actions">
+              <label>
+                Asset number
+                <select id="repairOrderAssetFilter">
+                  <option value="__all">All assets</option>
+                </select>
+              </label>
+              <button id="shareTodayRepairsWhatsapp" type="button" data-shop-admin-action>Send Yesterday and Today by WhatsApp</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>RO</th><th>Status</th><th>RO date</th><th>Original schedule</th><th>Current schedule</th><th>Working</th><th>Completed</th><th>Asset</th><th>Location</th><th>Mechanic</th><th>Driver</th><th>Mileage</th><th>Hours</th><th>Repair codes</th><th>Parts</th><th>Parts total</th><th>Repair cost</th><th>Total cost</th><th>Source</th><th>Job description</th></tr>
+              </thead>
+              <tbody id="repairOrdersList"></tbody>
+            </table>
+          </div>
+          <p id="repairOrdersEmpty" class="empty-state">No repair orders found.</p>
+          <p id="repairOrdersShareMessage" class="form-message" role="status"></p>
+      </section>
+
+      <section id="unitRepairHistoryPage" class="current-inventory-page" data-shop-page-view="unit-repair-history" data-admin-only data-shop-readable hidden>
+        <div class="dashboard-heading">
+          <div><h1>Unit Repair History</h1><p>Find every saved repair order and parts expense for one unit.</p></div>
+          <label class="history-unit-filter">Unit number<select id="unitRepairHistoryAsset"><option value="">Select unit</option></select></label>
+        </div>
+        <section class="inventory-value-summary" aria-label="Unit repair totals">
+          <article><span>Repair orders</span><strong id="unitHistoryOrderCount">0</strong></article>
+          <article><span>Parts used</span><strong id="unitHistoryPartsQuantity">0</strong></article>
+          <article><span>Parts expense</span><strong id="unitHistoryPartsExpense">$0.00</strong></article>
+          <article><span>Other repair cost</span><strong id="unitHistoryRepairCost">$0.00</strong></article>
+        </section>
+        <section class="shop-panel current-inventory-table">
+          <div class="panel-heading"><h2>Saved Repair Orders</h2><span id="unitHistoryTotal">Select a unit</span></div>
+          <div class="table-wrap"><table><thead><tr><th>RO</th><th>Date</th><th>Status</th><th>Mechanic</th><th>Source</th><th>Repair codes</th><th>Parts</th><th>Parts quantity</th><th>Parts expense</th><th>Repair cost</th><th>Total cost</th><th>Description of job done</th><th>Print</th></tr></thead><tbody id="unitRepairHistoryList"></tbody></table></div>
+          <p id="unitRepairHistoryEmpty" class="empty-state">Select a unit to view its repair history.</p>
+        </section>
+      </section>
+
+      <section id="scheduleServicePage" class="repair-order-layout" data-shop-page-view="schedule-service" hidden>
+        <form id="serviceScheduleForm" class="shop-panel repair-order-form">
+          <h1>Schedule Service</h1>
+          <div class="form-grid">
+            <label>
+              Date
+              <input id="serviceScheduleDate" type="date" required>
+            </label>
+            <label>
+              Shift
+              <select id="serviceScheduleShift" required>
+                <option value="Day">Day Shift</option>
+                <option value="Night">Night Shift</option>
+              </select>
+            </label>
+            <label>
+              Asset number
+              <select id="serviceScheduleAsset" required>
+                <option value="">Select asset</option>
+              </select>
+            </label>
+            <label>
+              Driver name
+              <input id="serviceScheduleDriverName" autocomplete="name" required>
+            </label>
+            <label>
+              Location
+              <select id="serviceScheduleLocation" required>
+                <option value="">Select location</option>
+                <option value="Big Spring">Big Spring</option>
+                <option value="Midland">Midland</option>
+              </select>
+            </label>
+            <label>
+              Priority
+              <select id="serviceSchedulePriority" required>
+                <option>Normal</option>
+                <option>Low</option>
+                <option>High</option>
+                <option>Urgent</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Service notes
+            <textarea id="serviceScheduleNotes" rows="5" required></textarea>
+          </label>
+          <button type="submit">Schedule service</button>
+          <p id="serviceScheduleMessage" class="form-message" role="status"></p>
+        </form>
+      </section>
+
+      <section id="scheduledRepairsPage" class="shop-panel repair-orders-list" data-shop-page-view="scheduled-repairs" hidden>
+        <div class="saved-orders-heading">
+          <div>
+            <h1>Scheduled Repairs</h1>
+            <span id="serviceSchedulesTotal">0 scheduled repairs</span>
+          </div>
+          <label>
+            Status
+            <select id="serviceScheduleStatusFilter">
+              <option value="__all">All statuses</option>
+              <option>Scheduled</option>
+              <option>Working on it</option>
+            </select>
+          </label>
+        </div>
+        <section class="schedule-availability" aria-labelledby="availabilityHeading">
+          <div>
+            <h2 id="availabilityHeading">Weekly Service Workload</h2>
+            <span id="serviceAvailableDaysTotal">0 services this week</span>
+          </div>
+          <label>
+            Week of
+            <input id="serviceAvailabilityDate" type="date">
+          </label>
+          <div id="serviceAvailableDays" class="available-days"></div>
+          <p id="serviceAvailableDaysEmpty" class="empty-state" hidden>No service days found.</p>
+        </section>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Service</th><th>Original day</th><th>Current day</th><th>Shift</th><th>Asset</th><th>Driver</th><th>Location</th><th>Mechanic</th><th>Priority</th><th>Service notes</th><th>Updated by</th><th>Status</th><th>Action</th></tr>
+            </thead>
+            <tbody id="serviceSchedulesList"></tbody>
+          </table>
+        </div>
+        <p id="serviceSchedulesEmpty" class="empty-state">No scheduled repairs found.</p>
+        <p id="serviceSchedulesMessage" class="form-message" role="status"></p>
+      </section>
+    </section>
+
+    <section id="shopDenied" class="access-panel" hidden>
+      <h1>Shop access required</h1>
+      <p>Sign in with an Admin or Scheduler account to open Sunwave Shop.</p>
+      <a href="../index.html">Return to sign in</a>
+    </section>
+  </main>
+  <script src="../jsQR.js"></script>
+  <script src="app.js?v=258"></script>
+</body>
+</html>
