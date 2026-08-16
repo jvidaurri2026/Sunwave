@@ -57,7 +57,9 @@ document.getElementById("shopDenied").hidden = Boolean(session);
 if (session) {
   document.getElementById("shopUser").textContent = `${session.user.name} - ${session.user.role}`;
   document.querySelectorAll("[data-admin-only]").forEach((element) => {
-    element.hidden = !isShopAdmin && !(isShopViewer && element.hasAttribute("data-shop-readable"));
+    const viewerCanRead = isShopViewer && element.hasAttribute("data-shop-readable");
+    const technicianCanRead = isShopTechnician && element.hasAttribute("data-technician-readable");
+    element.hidden = !isShopAdmin && !viewerCanRead && !technicianCanRead;
   });
   document.querySelectorAll("[data-shop-admin-action]").forEach((element) => {
     element.hidden = !isShopAdmin;
@@ -133,8 +135,8 @@ if (session) {
     setShopPage("schedule-service");
     Promise.all([loadUnitTypes(), loadRepairCodes(), loadServiceSchedules(), loadServiceDayStatuses()]);
   } else {
-    setShopPage("scheduled-repairs");
-    Promise.all([loadUnitTypes(), loadRepairCodes(), loadParts(), loadServiceSchedules(), loadServiceDayStatuses()]);
+    setShopPage("dashboard");
+    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders()]).then(loadParts);
   }
 }
 
@@ -927,7 +929,7 @@ function renderOutOfServiceAssetOptions() {
 }
 
 async function loadOutOfServiceReports() {
-  if (!isShopAdmin && !isShopViewer) return;
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
   const message = document.getElementById("outOfServiceMessage");
   try {
     outOfServiceReports = await shopApi("/api/shop-out-of-service");
@@ -987,7 +989,7 @@ function renderOutOfServiceReports() {
   outOfServiceReports.forEach((report) => {
     const row = document.createElement("tr");
     row.className = `schedule-row ${outOfServiceStatusClass(report.status)}`;
-    const thirdPartyDetails = ["Needs 3rd Party", "Repairing at 3rd Party"].includes(report.status)
+    const thirdPartyDetails = isShopAdmin && ["Needs 3rd Party", "Repairing at 3rd Party"].includes(report.status)
       ? `<div class="table-field-stack"><input class="report-third-party-shop" value="${escapeHtml(report.thirdPartyShop)}" aria-label="Third-party shop" placeholder="Shop name"><input class="report-third-party-date" type="date" value="${escapeHtml(report.thirdPartySendDate)}" aria-label="Date to be sent"></div>`
       : report.status === "Fixed" && report.fixedAt
         ? `<div class="table-cell-lines"><strong>Completed ${escapeHtml(report.completedDate || report.fixedAt.slice(0, 10))}</strong>\nRepair cost: $${escapeHtml(report.repairCost || "0.00")}\n${escapeHtml(report.repairNotes || "No repair notes")}\nRO #${escapeHtml(report.repairOrderId || "Not linked")}</div>`
@@ -995,14 +997,14 @@ function renderOutOfServiceReports() {
     row.innerHTML = `
       <td><strong>${escapeHtml(report.assetNumber)}</strong></td>
       <td>${escapeHtml(report.outDate)}</td>
-      <td>${report.status === "Fixed" ? escapeHtml(report.noEta ? "No ETA" : report.etaDate || "Not set") : `<div class="table-field-stack"><input class="report-eta-date table-date-input" type="date" value="${escapeHtml(report.etaDate || "")}" aria-label="ETA to fix" ${report.noEta ? "disabled" : ""}><label class="compact-switch"><input class="report-no-eta" type="checkbox" role="switch" ${report.noEta ? "checked" : ""}> No ETA</label></div>`}</td>
+      <td>${report.status === "Fixed" || !isShopAdmin ? escapeHtml(report.noEta ? "No ETA" : report.etaDate || "Not set") : `<div class="table-field-stack"><input class="report-eta-date table-date-input" type="date" value="${escapeHtml(report.etaDate || "")}" aria-label="ETA to fix" ${report.noEta ? "disabled" : ""}><label class="compact-switch"><input class="report-no-eta" type="checkbox" role="switch" ${report.noEta ? "checked" : ""}> No ETA</label></div>`}</td>
       <td class="table-cell-lines">${escapeHtml(report.issue)}</td>
-      <td>${report.status === "Fixed" ? `<strong>Fix Completed</strong>` : `<select class="table-status-select report-status" aria-label="Repair status"></select>`}</td>
+      <td>${report.status === "Fixed" ? `<strong>Fix Completed</strong>` : isShopAdmin ? `<select class="table-status-select report-status" aria-label="Repair status"></select>` : escapeHtml(report.status)}</td>
       <td class="report-third-party-cell">${thirdPartyDetails}</td>
       <td>${escapeHtml(report.updatedBy || "Unknown")}</td>
-      <td>${report.status === "Fixed" ? "Back in service" : `<button class="table-action update-out-of-service" type="button">Update</button>`}</td>
+      <td>${report.status === "Fixed" ? "Back in service" : isShopAdmin ? `<button class="table-action update-out-of-service" type="button">Update</button>` : "View only"}</td>
     `;
-    if (report.status !== "Fixed") {
+    if (report.status !== "Fixed" && isShopAdmin) {
       const statusSelect = row.querySelector(".report-status");
       ["Diagnosing", "Waiting for Parts", "Needs 3rd Party", "Repairing at 3rd Party", "Sent to Auction"].forEach((status) => statusSelect.add(new Option(status, status)));
       statusSelect.add(new Option("Fix Completed", "Fixed"));
@@ -1058,7 +1060,7 @@ async function updateOutOfServiceReport(report, row) {
 
 function setShopPage(page) {
   if (page !== "smart-part-intake") stopSmartPartScan();
-  if (isShopTechnician && !(page === "repair-orders" && activeScheduleRepairId)) page = "scheduled-repairs";
+  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "repair-orders", "out-of-service", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (isShopViewer && !["dashboard", "orders-history", "current-inventory", "tire-inventory", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (!isShopAdmin && !isShopViewer && !["schedule-service", "scheduled-repairs"].includes(page)) page = "schedule-service";
   document.querySelectorAll("[data-shop-page-view]").forEach((section) => {
@@ -1640,7 +1642,7 @@ function renderRepairOrderCodeOptions() {
           ${(item.options || []).map((option) => `
             <label>
               <input type="checkbox" data-option-for="${escapeHtml(item.code)}" value="${escapeHtml(option.name)}">
-              <span>${escapeHtml(option.name)}<small>${option.laborHours == null ? "Labor pending" : `${escapeHtml(option.laborHours)} labor hours`}</small></span>
+              <span>${escapeHtml(option.name)}${isShopAdmin ? `<small>${option.laborHours == null ? "Labor pending" : `${escapeHtml(option.laborHours)} labor hours`}</small>` : ""}</span>
             </label>
           `).join("")}
         </div>
@@ -1813,9 +1815,9 @@ function printRepairOrderInvoice(orderId) {
   const unit = unitTypes.find((item) => item.assetNumber === order.assetNumber) || {};
   const codes = (order.repairCodes || []).map((code) => {
     const positions = (code.positions || []).length ? ` (${code.positions.join(", ")})` : "";
-    const options = (code.options || []).map((option) => `<li>${escapeHtml(option.name)}${option.laborHours == null ? "" : ` - ${escapeHtml(option.laborHours)} hr`}</li>`).join("");
-    return `<tr><td>${escapeHtml(code.code)}</td><td>${escapeHtml(code.description || "No description")}${escapeHtml(positions)}${options ? `<ul>${options}</ul>` : ""}</td><td>${escapeHtml(code.laborHours || "0.00")}</td></tr>`;
-  }).join("") || `<tr><td colspan="3">No repair codes recorded</td></tr>`;
+    const options = (code.options || []).map((option) => `<li>${escapeHtml(option.name)}${isShopAdmin && option.laborHours != null ? ` - ${escapeHtml(option.laborHours)} hr` : ""}</li>`).join("");
+    return `<tr><td>${escapeHtml(code.code)}</td><td>${escapeHtml(code.description || "No description")}${escapeHtml(positions)}${options ? `<ul>${options}</ul>` : ""}</td>${isShopAdmin ? `<td>${escapeHtml(code.laborHours || "0.00")}</td>` : ""}</tr>`;
+  }).join("") || `<tr><td colspan="${isShopAdmin ? 3 : 2}">No repair codes recorded</td></tr>`;
   const parts = (order.partsUsed || []).map((part) => `<tr><td>${escapeHtml(part.partNumber)}</td><td>${escapeHtml(part.description || "No description")}</td><td>${Number(part.quantity || 0)}</td><td>$${escapeHtml(part.unitPrice || "0.00")}</td><td>$${escapeHtml(part.totalPrice || "0.00")}</td></tr>`).join("") || `<tr><td colspan="5">No parts recorded</td></tr>`;
   const invoice = window.open("", "_blank", "width=980,height=760");
   if (!invoice) {
@@ -1824,7 +1826,7 @@ function printRepairOrderInvoice(orderId) {
   }
   invoice.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Repair Order ${Number(order.id)}</title><style>
     *{box-sizing:border-box}body{margin:0;background:#fff;color:#202124;font:14px Arial,sans-serif}.invoice{max-width:900px;margin:0 auto;padding:32px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:4px solid #7a1731;padding-bottom:18px}.brand h1{margin:0;color:#7a1731;font-size:28px}.brand p,.invoice-title p{margin:5px 0 0;color:#5f6368}.invoice-title{text-align:right}.invoice-title h2{margin:0;font-size:24px}.status{display:inline-block;margin-top:8px;padding:5px 10px;border:1px solid #7a1731;color:#7a1731;font-weight:700}.details{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}.detail{border:1px solid #d8dadd;padding:10px;min-height:58px}.detail span{display:block;color:#666;font-size:11px;text-transform:uppercase;margin-bottom:5px}.section{margin-top:22px}.section h3{margin:0 0 8px;color:#7a1731;font-size:15px;text-transform:uppercase}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d8dadd;padding:8px;text-align:left;vertical-align:top}th{background:#f2f3f4;font-size:12px}.money{text-align:right}.job{border:1px solid #d8dadd;padding:12px;white-space:pre-wrap;min-height:72px}.totals{width:330px;margin:20px 0 0 auto}.totals div{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ddd}.totals .grand{font-size:17px;font-weight:700;color:#7a1731}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:54px}.signature{border-top:1px solid #333;padding-top:6px;color:#666}.actions{display:flex;justify-content:flex-end;margin-bottom:16px}.actions button{background:#7a1731;color:white;border:0;padding:10px 16px;font-weight:700;cursor:pointer}@media print{.actions{display:none}.invoice{max-width:none;padding:0}@page{margin:0.45in}}
-  </style></head><body><main class="invoice"><div class="actions"><button onclick="window.print()">Print / Save PDF</button></div><header class="header"><div class="brand"><h1>Sunwave Shop</h1><p>Maintenance and Repair Services</p></div><div class="invoice-title"><h2>Repair Order Invoice</h2><p>RO #${Number(order.id)}</p><span class="status">${escapeHtml(order.status || "Completed")}</span></div></header><section class="details"><div class="detail"><span>Unit number</span><strong>${escapeHtml(order.assetNumber)}</strong></div><div class="detail"><span>Unit type</span><strong>${escapeHtml(unit.unitType || "Not recorded")}</strong></div><div class="detail"><span>Date</span><strong>${escapeHtml(order.date)}</strong></div><div class="detail"><span>Make / Model</span><strong>${escapeHtml([unit.make, unit.model].filter(Boolean).join(" ") || "Not recorded")}</strong></div><div class="detail"><span>Location</span><strong>${escapeHtml(order.location || "Not recorded")}</strong></div><div class="detail"><span>Mechanic</span><strong>${escapeHtml(order.technicianName || "Not recorded")}</strong></div><div class="detail"><span>Driver</span><strong>${escapeHtml(order.driverName || "Not recorded")}</strong></div><div class="detail"><span>Mileage</span><strong>${escapeHtml(order.assetMileage || "Not recorded")}</strong></div><div class="detail"><span>Hours</span><strong>${escapeHtml(order.assetHours || "Not recorded")}</strong></div></section><section class="section"><h3>Description of job done</h3><div class="job">${escapeHtml(order.jobDescription || "No description recorded")}</div></section><section class="section"><h3>Repair codes</h3><table><thead><tr><th>Code</th><th>Description / position</th><th>Labor hours</th></tr></thead><tbody>${codes}</tbody></table></section><section class="section"><h3>Parts used</h3><table><thead><tr><th>Part number</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>${parts}</tbody></table></section><div class="totals"><div><span>Parts total</span><strong>$${escapeHtml(order.partsTotal || "0.00")}</strong></div><div><span>Other repair cost</span><strong>$${escapeHtml(order.repairCost || "0.00")}</strong></div><div class="grand"><span>Total</span><strong>$${escapeHtml(order.totalCost || order.partsTotal || "0.00")}</strong></div></div><div class="signatures"><div class="signature">Mechanic signature</div><div class="signature">Authorized signature</div></div></main></body></html>`);
+  </style></head><body><main class="invoice"><div class="actions"><button onclick="window.print()">Print / Save PDF</button></div><header class="header"><div class="brand"><h1>Sunwave Shop</h1><p>Maintenance and Repair Services</p></div><div class="invoice-title"><h2>Repair Order Invoice</h2><p>RO #${Number(order.id)}</p><span class="status">${escapeHtml(order.status || "Completed")}</span></div></header><section class="details"><div class="detail"><span>Unit number</span><strong>${escapeHtml(order.assetNumber)}</strong></div><div class="detail"><span>Unit type</span><strong>${escapeHtml(unit.unitType || "Not recorded")}</strong></div><div class="detail"><span>Date</span><strong>${escapeHtml(order.date)}</strong></div><div class="detail"><span>Make / Model</span><strong>${escapeHtml([unit.make, unit.model].filter(Boolean).join(" ") || "Not recorded")}</strong></div><div class="detail"><span>Location</span><strong>${escapeHtml(order.location || "Not recorded")}</strong></div><div class="detail"><span>Mechanic</span><strong>${escapeHtml(order.technicianName || "Not recorded")}</strong></div><div class="detail"><span>Driver</span><strong>${escapeHtml(order.driverName || "Not recorded")}</strong></div><div class="detail"><span>Mileage</span><strong>${escapeHtml(order.assetMileage || "Not recorded")}</strong></div><div class="detail"><span>Hours</span><strong>${escapeHtml(order.assetHours || "Not recorded")}</strong></div></section><section class="section"><h3>Description of job done</h3><div class="job">${escapeHtml(order.jobDescription || "No description recorded")}</div></section><section class="section"><h3>Repair codes</h3><table><thead><tr><th>Code</th><th>Description / position</th>${isShopAdmin ? "<th>Labor hours</th>" : ""}</tr></thead><tbody>${codes}</tbody></table></section><section class="section"><h3>Parts used</h3><table><thead><tr><th>Part number</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>${parts}</tbody></table></section><div class="totals"><div><span>Parts total</span><strong>$${escapeHtml(order.partsTotal || "0.00")}</strong></div><div><span>Other repair cost</span><strong>$${escapeHtml(order.repairCost || "0.00")}</strong></div><div class="grand"><span>Total</span><strong>$${escapeHtml(order.totalCost || order.partsTotal || "0.00")}</strong></div></div><div class="signatures"><div class="signature">Mechanic signature</div><div class="signature">Authorized signature</div></div></main></body></html>`);
   invoice.document.close();
   invoice.focus();
 }

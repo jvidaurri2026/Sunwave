@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#7b1e3a">
   <title>Sunwave Shop</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=258">
+  <link rel="stylesheet" href="styles.css?v=259">
 </head>
 <body>
   <main class="shop-shell">
@@ -23,23 +23,23 @@
 
     <section id="shopWorkspace" class="shop-workspace" hidden>
       <nav class="shop-menu" aria-label="Shop menu">
-        <button class="active" type="button" data-shop-page="dashboard" data-admin-only data-shop-readable>Dashboard</button>
+        <button class="active" type="button" data-shop-page="dashboard" data-admin-only data-shop-readable data-technician-readable>Dashboard</button>
         <button type="button" data-shop-page="orders-history" data-admin-only data-shop-readable>Orders History</button>
-        <button type="button" data-shop-page="current-inventory" data-admin-only data-shop-readable>Current Inventory</button>
-        <button type="button" data-shop-page="tire-inventory" data-admin-only data-shop-readable>Tire Inventory</button>
+        <button type="button" data-shop-page="current-inventory" data-admin-only data-shop-readable data-technician-readable>Current Inventory</button>
+        <button type="button" data-shop-page="tire-inventory" data-admin-only data-shop-readable data-technician-readable>Tire Inventory</button>
         <button type="button" data-shop-page="parts" data-admin-only>Parts Inventory</button>
         <button type="button" data-shop-page="smart-part-intake" data-admin-only>Smart Part Intake</button>
         <button type="button" data-shop-page="unit-types" data-admin-only>Units</button>
         <button type="button" data-shop-page="repair-codes" data-admin-only>Repair Codes</button>
         <button type="button" data-shop-page="whatsapp-settings" data-admin-only>WhatsApp Settings</button>
-        <button type="button" data-shop-page="repair-orders" data-admin-only>Repair Order</button>
-        <button type="button" data-shop-page="out-of-service" data-admin-only>Out of Service</button>
+        <button type="button" data-shop-page="repair-orders" data-admin-only data-technician-readable>Repair Order</button>
+        <button type="button" data-shop-page="out-of-service" data-admin-only data-technician-readable>Out of Service</button>
         <button type="button" data-shop-page="saved-repair-orders" data-admin-only data-shop-readable>Saved Repair Orders</button>
-        <button type="button" data-shop-page="unit-repair-history" data-admin-only data-shop-readable>Unit Repair History</button>
+        <button type="button" data-shop-page="unit-repair-history" data-admin-only data-shop-readable data-technician-readable>Unit Repair History</button>
         <button type="button" data-shop-page="schedule-service" data-scheduler-only>Schedule Service</button>
         <button type="button" data-shop-page="scheduled-repairs">Scheduled Repairs</button>
       </nav>
-      <section id="shopDashboardPage" class="shop-dashboard" data-shop-page-view="dashboard" data-admin-only data-shop-readable>
+      <section id="shopDashboardPage" class="shop-dashboard" data-shop-page-view="dashboard" data-admin-only data-shop-readable data-technician-readable>
         <div class="dashboard-heading">
           <div><h1>Service Dashboard</h1><p>Current workload, completed service, and parts spending.</p></div>
           <div class="dashboard-report-actions">
@@ -150,8 +150,8 @@
           <p id="ordersHistoryEmpty" class="empty-state">No order records match the selected filters.</p>
         </section>
       </section>
-      <section id="outOfServicePage" class="parts-layout" data-shop-page-view="out-of-service" data-admin-only hidden>
-        <form id="outOfServiceForm" class="shop-panel part-form">
+      <section id="outOfServicePage" class="parts-layout" data-shop-page-view="out-of-service" data-admin-only data-technician-readable hidden>
+        <form id="outOfServiceForm" class="shop-panel part-form" data-shop-admin-action>
           <h1>Put Unit Out of Service</h1>
           <label>
             Unit
@@ -252,7 +252,7 @@
           <p id="whatsappSettingsMessage" class="form-message" role="status"></p>
         </form>
       </section>
-      <section id="currentInventoryPage" class="current-inventory-page" data-shop-page-view="current-inventory" data-admin-only data-shop-readable hidden>
+      <section id="currentInventoryPage" class="current-inventory-page" data-shop-page-view="current-inventory" data-admin-only data-shop-readable data-technician-readable hidden>
         <div class="dashboard-heading">
           <div><h1>Current Inventory</h1><p>Parts currently on hand and their inventory value.</p></div>
           <span id="currentInventoryUpdatedAt"></span>
@@ -278,7 +278,7 @@
           <p id="currentInventoryEmpty" class="empty-state">No parts are currently in inventory.</p>
         </section>
       </section>
-      <section id="tireInventoryPage" class="current-inventory-page" data-shop-page-view="tire-inventory" data-admin-only data-shop-readable hidden>
+      <section id="tireInventoryPage" class="current-inventory-page" data-shop-page-view="tire-inventory" data-admin-only data-shop-readable data-technician-readable hidden>
         <div class="dashboard-heading">
           <div><h1>Tire Inventory</h1><p>Current tire stock, sizes, and inventory value.</p></div>
           <span id="tireInventoryUpdatedAt"></span>
@@ -555,7 +555,7 @@
         </section>
       </section>
 
-      <section id="repairOrdersPage" class="repair-order-layout" data-shop-page-view="repair-orders" hidden>
+      <section id="repairOrdersPage" class="repair-order-layout" data-shop-page-view="repair-orders" data-admin-only data-technician-readable hidden>
         <form id="repairOrderForm" class="shop-panel repair-order-form">
           <h1>Repair Order</h1>
           <div class="form-grid">
@@ -641,7 +641,7 @@
           <p id="repairOrdersShareMessage" class="form-message" role="status"></p>
       </section>
 
-      <section id="unitRepairHistoryPage" class="current-inventory-page" data-shop-page-view="unit-repair-history" data-admin-only data-shop-readable hidden>
+      <section id="unitRepairHistoryPage" class="current-inventory-page" data-shop-page-view="unit-repair-history" data-admin-only data-shop-readable data-technician-readable hidden>
         <div class="dashboard-heading">
           <div><h1>Unit Repair History</h1><p>Find every saved repair order and parts expense for one unit.</p></div>
           <label class="history-unit-filter">Unit number<select id="unitRepairHistoryAsset"><option value="">Select unit</option></select></label>
@@ -758,6 +758,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=258"></script>
+  <script src="app.js?v=259"></script>
 </body>
 </html>

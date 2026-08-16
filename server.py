@@ -1271,7 +1271,8 @@ class Handler(SimpleHTTPRequestHandler):
         if self.reject_technician_request(
             allowed_paths={
                 "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-codes",
-                "/api/shop-service-schedules", "/api/shop-service-day-statuses"
+                "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-service-day-statuses",
+                "/api/shop-out-of-service", "/api/shop-part-orders"
             }
         ):
             return
@@ -2251,10 +2252,10 @@ class Handler(SimpleHTTPRequestHandler):
             for option in conn.execute(
                 "SELECT code, option_name, labor_minutes FROM shop_repair_code_options ORDER BY code COLLATE NOCASE, option_name COLLATE NOCASE"
             ).fetchall():
-                options_by_code.setdefault(option["code"].casefold(), []).append({
-                    "name": option["option_name"],
-                    "laborHours": None if option["labor_minutes"] is None else f"{int(option['labor_minutes']) / 60:.2f}",
-                })
+                option_payload = {"name": option["option_name"]}
+                if user["role"] == "Admin":
+                    option_payload["laborHours"] = None if option["labor_minutes"] is None else f"{int(option['labor_minutes']) / 60:.2f}"
+                options_by_code.setdefault(option["code"].casefold(), []).append(option_payload)
         self.send_json([
             {
                 "code": row["code"],
@@ -2354,7 +2355,8 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"ok": True})
 
     def list_shop_repair_orders(self):
-        if self.require_shop_viewer() is None:
+        user = self.require_shop_viewer()
+        if user is None:
             return
         with connect() as conn:
             orders = conn.execute(
@@ -2383,10 +2385,10 @@ class Handler(SimpleHTTPRequestHandler):
                 ).fetchall()
                 selected_options_by_code = {}
                 for option in selected_options:
-                    selected_options_by_code.setdefault(option["code"].casefold(), []).append({
-                        "name": option["option_name"],
-                        "laborHours": None if option["labor_minutes"] is None else f"{int(option['labor_minutes']) / 60:.2f}",
-                    })
+                    option_payload = {"name": option["option_name"]}
+                    if user["role"] == "Admin":
+                        option_payload["laborHours"] = None if option["labor_minutes"] is None else f"{int(option['labor_minutes']) / 60:.2f}"
+                    selected_options_by_code.setdefault(option["code"].casefold(), []).append(option_payload)
                 parts = conn.execute(
                     "SELECT part_number, description, vendor, quantity, unit_price_cents FROM shop_repair_order_parts WHERE repair_order_id = ? ORDER BY part_number COLLATE NOCASE",
                     (order["id"],),
@@ -2408,7 +2410,7 @@ class Handler(SimpleHTTPRequestHandler):
                         {
                             "code": code["code"],
                             "description": code["description"],
-                            "laborHours": f"{int(code['labor_minutes']) / 60:.2f}",
+                            **({"laborHours": f"{int(code['labor_minutes']) / 60:.2f}"} if user["role"] == "Admin" else {}),
                             "positions": [value for value in (code["positions"] or "").split("|") if value],
                             "options": selected_options_by_code.get(code["code"].casefold(), []),
                         }
@@ -2445,7 +2447,7 @@ class Handler(SimpleHTTPRequestHandler):
             schedule_id = int(raw_schedule_id) if raw_schedule_id not in (None, "") else None
         except (TypeError, ValueError):
             return self.send_json({"error": "Scheduled repair was not found."}, 400)
-        user = self.require_shop_technician() if schedule_id is not None else self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         order_date = str(data.get("date") or "").strip()
