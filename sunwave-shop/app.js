@@ -182,7 +182,7 @@ function renderDashboardPartOrderUnitOptions() {
 }
 
 async function loadShopPartOrders() {
-  if (!isShopAdmin && !isShopViewer) return;
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
   const message = document.getElementById("dashboardPartOrderMessage");
   try {
     shopPartOrders = await shopApi("/api/shop-part-orders");
