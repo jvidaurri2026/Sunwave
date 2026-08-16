@@ -84,6 +84,8 @@ if (session) {
   document.getElementById("smartPartCompatibilitySearchButton").addEventListener("click", openSmartPartCompatibilitySearch);
   document.getElementById("smartPartYears").addEventListener("change", renderSmartPartUnitTypeOptions);
   document.getElementById("smartPartUnitType").addEventListener("change", updateSmartPartFuelTypeField);
+  document.getElementById("smartPartIsTire").addEventListener("change", renderSmartTireInventory);
+  document.getElementById("smartPartNumber").addEventListener("input", updateSmartTireDuplicateStatus);
   document.getElementById("unitTypeForm").addEventListener("submit", saveUnitType);
   document.getElementById("unitTypeCancelButton").addEventListener("click", resetUnitTypeForm);
   document.getElementById("repairCodeForm").addEventListener("submit", saveRepairCode);
@@ -426,6 +428,7 @@ async function loadParts() {
     renderParts(inventoryParts);
     renderCurrentInventoryPage();
     renderTireInventoryPage();
+    renderSmartTireInventory();
     renderRepairOrderParts();
     renderShopDashboard();
   } catch (error) {
@@ -445,6 +448,52 @@ function renderSmartPartOptions() {
   serviceCode.replaceChildren(new Option("Select service code", ""));
   repairCodes.forEach((item) => serviceCode.add(new Option(`${item.code} - ${item.description}`, item.code)));
   if (repairCodes.some((item) => item.code === selectedCode)) serviceCode.value = selectedCode;
+}
+
+function isTirePart(part) {
+  return Boolean(part.isTire) || String(part.serviceCode || "").trim() === "500" || String(part.description || "").toLowerCase().includes("tire");
+}
+
+function normalizedTirePartNumber(value) {
+  return String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function matchingExistingTire(partNumber) {
+  const normalized = normalizedTirePartNumber(partNumber);
+  if (!normalized) return null;
+  return inventoryParts.find((part) => isTirePart(part) && normalizedTirePartNumber(part.partNumber) === normalized) || null;
+}
+
+function updateSmartTireDuplicateStatus() {
+  if (!document.getElementById("smartPartIsTire").checked) return null;
+  const match = matchingExistingTire(document.getElementById("smartPartNumber").value);
+  const status = document.getElementById("smartPartExistingStatus");
+  if (match) status.textContent = `${match.partNumber} already exists - ${match.quantity} in stock`;
+  return match;
+}
+
+function renderSmartTireInventory() {
+  const panel = document.getElementById("smartPartTireInventory");
+  const checked = document.getElementById("smartPartIsTire").checked;
+  panel.hidden = !checked;
+  if (!checked) return;
+  const tires = inventoryParts.filter(isTirePart).sort((a, b) => a.partNumber.localeCompare(b.partNumber, undefined, { numeric: true }));
+  document.getElementById("smartPartTireCount").textContent = `${tires.length} tire part${tires.length === 1 ? "" : "s"}`;
+  const list = document.getElementById("smartPartTireList");
+  list.replaceChildren();
+  tires.forEach((part) => {
+    const item = document.createElement("article");
+    item.className = "smart-tire-item";
+    item.innerHTML = `<div><strong>${escapeHtml(part.partNumber)}</strong><span>${escapeHtml(part.description || "Tire")}</span><small>${escapeHtml(part.unitType || "Unassigned")}</small></div><strong>Qty ${Number(part.quantity || 0)}</strong><button class="secondary-button" type="button">Use existing</button>`;
+    item.querySelector("button").addEventListener("click", () => {
+      applySmartPartRecord(part, true);
+      document.getElementById("smartPartQuantity").focus();
+      document.getElementById("smartPartSaveMessage").textContent = `Adding quantity to existing tire ${part.partNumber}.`;
+    });
+    list.append(item);
+  });
+  if (!tires.length) list.innerHTML = `<p class="empty-state">No tire parts are stored yet.</p>`;
+  updateSmartTireDuplicateStatus();
 }
 
 function renderSmartPartUnitTypeOptions() {
@@ -480,6 +529,8 @@ function applySmartPartRecord(part, existing = false) {
   updateSmartPartFuelTypeField();
   document.getElementById("smartPartFuelType").value = part.fuelType || "";
   document.getElementById("smartPartServiceCode").value = part.serviceCode || "";
+  document.getElementById("smartPartIsTire").checked = isTirePart(part);
+  renderSmartTireInventory();
   document.getElementById("smartPartExistingStatus").textContent = existing ? `${part.quantity} currently in stock` : "New part";
 }
 
@@ -530,6 +581,7 @@ function resetSmartPartForm(clearLookup = true) {
   document.getElementById("smartPartExistingStatus").textContent = "New part";
   document.getElementById("smartPartSaveMessage").textContent = "";
   renderSmartPartOptions();
+  renderSmartTireInventory();
   if (clearLookup) {
     document.getElementById("smartPartLookupForm").reset();
     document.getElementById("smartPartMatches").replaceChildren();
@@ -541,6 +593,14 @@ function resetSmartPartForm(clearLookup = true) {
 async function saveSmartPart(event) {
   event.preventDefault();
   const message = document.getElementById("smartPartSaveMessage");
+  const isTire = document.getElementById("smartPartIsTire").checked;
+  const enteredPartNumber = document.getElementById("smartPartNumber").value.trim();
+  const existingTire = isTire ? matchingExistingTire(enteredPartNumber) : null;
+  if (existingTire && existingTire.partNumber.toLowerCase() !== enteredPartNumber.toLowerCase()) {
+    applySmartPartRecord(existingTire, true);
+    message.textContent = `${enteredPartNumber} matches existing tire ${existingTire.partNumber}. Enter the quantity to add to the existing tire.`;
+    return;
+  }
   message.textContent = "Saving";
   try {
     const result = await shopApi("/api/shop-parts", { method: "POST", body: JSON.stringify({
@@ -552,6 +612,7 @@ async function saveSmartPart(event) {
       unitType: document.getElementById("smartPartUnitType").value,
       fuelType: document.getElementById("smartPartFuelType").value,
       serviceCode: document.getElementById("smartPartServiceCode").value,
+      isTire,
       quantity: document.getElementById("smartPartQuantity").value,
       replaceQuantity: false
     }) });
@@ -669,7 +730,7 @@ function stopSmartPartScan() {
 }
 
 function renderCurrentInventoryPage() {
-  if (!isShopAdmin && !isShopViewer) return;
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
   const parts = inventoryParts
     .map((part) => {
       const quantity = Number(part.quantity || 0);
@@ -714,9 +775,9 @@ function renderCurrentInventoryPage() {
 }
 
 function renderTireInventoryPage() {
-  if (!isShopAdmin && !isShopViewer) return;
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
   const tires = inventoryParts
-    .filter((part) => String(part.serviceCode || "").trim() === "500" || String(part.description || "").toLowerCase().includes("tire"))
+    .filter(isTirePart)
     .map((part) => {
       const quantity = Number(part.quantity || 0);
       const unitPrice = Number(part.price || 0);
@@ -1060,9 +1121,9 @@ async function updateOutOfServiceReport(report, row) {
 
 function setShopPage(page) {
   if (page !== "smart-part-intake") stopSmartPartScan();
-  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "repair-orders", "out-of-service", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
+  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "smart-part-intake", "repair-orders", "out-of-service", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (isShopViewer && !["dashboard", "orders-history", "current-inventory", "tire-inventory", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
-  else if (!isShopAdmin && !isShopViewer && !["schedule-service", "scheduled-repairs"].includes(page)) page = "schedule-service";
+  else if (!isShopAdmin && !isShopViewer && !isShopTechnician && !["schedule-service", "scheduled-repairs"].includes(page)) page = "schedule-service";
   document.querySelectorAll("[data-shop-page-view]").forEach((section) => {
     section.hidden = section.dataset.shopPageView !== page;
   });
@@ -1128,7 +1189,7 @@ function isRepairOrderForDate(order, date) {
 }
 
 function renderShopDashboard() {
-  if (!isShopAdmin && !isShopViewer) return;
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
   const scheduled = serviceSchedules.filter((item) => item.status === "Scheduled").length;
   const working = serviceSchedules.filter((item) => item.status === "Working on it").length;
   const completed = repairOrders.filter((item) => (item.status || "Completed") === "Completed").length;

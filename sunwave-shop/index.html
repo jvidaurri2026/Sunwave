@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#7b1e3a">
   <title>Sunwave Shop</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=259">
+  <link rel="stylesheet" href="styles.css?v=265">
 </head>
 <body>
   <main class="shop-shell">
@@ -28,13 +28,13 @@
         <button type="button" data-shop-page="current-inventory" data-admin-only data-shop-readable data-technician-readable>Current Inventory</button>
         <button type="button" data-shop-page="tire-inventory" data-admin-only data-shop-readable data-technician-readable>Tire Inventory</button>
         <button type="button" data-shop-page="parts" data-admin-only>Parts Inventory</button>
-        <button type="button" data-shop-page="smart-part-intake" data-admin-only>Smart Part Intake</button>
+        <button type="button" data-shop-page="smart-part-intake" data-admin-only data-technician-readable>Smart Part Intake</button>
         <button type="button" data-shop-page="unit-types" data-admin-only>Units</button>
         <button type="button" data-shop-page="repair-codes" data-admin-only>Repair Codes</button>
         <button type="button" data-shop-page="whatsapp-settings" data-admin-only>WhatsApp Settings</button>
         <button type="button" data-shop-page="repair-orders" data-admin-only data-technician-readable>Repair Order</button>
         <button type="button" data-shop-page="out-of-service" data-admin-only data-technician-readable>Out of Service</button>
-        <button type="button" data-shop-page="saved-repair-orders" data-admin-only data-shop-readable>Saved Repair Orders</button>
+        <button type="button" data-shop-page="saved-repair-orders" data-admin-only data-shop-readable data-technician-readable>Saved Repair Orders</button>
         <button type="button" data-shop-page="unit-repair-history" data-admin-only data-shop-readable data-technician-readable>Unit Repair History</button>
         <button type="button" data-shop-page="schedule-service" data-scheduler-only>Schedule Service</button>
         <button type="button" data-shop-page="scheduled-repairs">Scheduled Repairs</button>
@@ -150,7 +150,7 @@
           <p id="ordersHistoryEmpty" class="empty-state">No order records match the selected filters.</p>
         </section>
       </section>
-      <section id="outOfServicePage" class="parts-layout" data-shop-page-view="out-of-service" data-admin-only data-technician-readable hidden>
+      <section id="outOfServicePage" class="parts-layout readonly-form-layout" data-shop-page-view="out-of-service" data-admin-only data-technician-readable hidden>
         <form id="outOfServiceForm" class="shop-panel part-form" data-shop-admin-action>
           <h1>Put Unit Out of Service</h1>
           <label>
@@ -387,7 +387,7 @@
         </section>
       </section>
 
-      <section id="smartPartIntakePage" class="smart-part-layout" data-shop-page-view="smart-part-intake" data-admin-only hidden>
+      <section id="smartPartIntakePage" class="smart-part-layout" data-shop-page-view="smart-part-intake" data-admin-only data-technician-readable hidden>
         <section class="shop-panel smart-part-lookup-panel">
           <div class="panel-heading">
             <div><h1>Smart Part Intake</h1><p>Scan a box barcode or enter the printed part number.</p></div>
@@ -414,6 +414,11 @@
 
         <form id="smartPartForm" class="shop-panel smart-part-form">
           <div class="panel-heading"><h2>Review and Register</h2><span id="smartPartExistingStatus">New part</span></div>
+          <label class="smart-part-confirmation"><input id="smartPartIsTire" type="checkbox"> This part is a tire</label>
+          <section id="smartPartTireInventory" class="smart-tire-inventory" hidden>
+            <div class="panel-heading"><h3>Existing Tire Parts</h3><span id="smartPartTireCount">0 tire parts</span></div>
+            <div id="smartPartTireList" class="smart-tire-list"></div>
+          </section>
           <div class="smart-part-fields">
             <label>Part number<input id="smartPartNumber" autocomplete="off" required></label>
             <label>Part description<textarea id="smartPartDescription" rows="3" required></textarea></label>
@@ -613,7 +618,7 @@
 
       </section>
 
-      <section id="savedRepairOrdersPage" class="shop-panel repair-orders-list" data-shop-page-view="saved-repair-orders" hidden>
+      <section id="savedRepairOrdersPage" class="shop-panel repair-orders-list" data-shop-page-view="saved-repair-orders" data-admin-only data-technician-readable hidden>
           <div class="saved-orders-heading">
             <div>
               <h1>Saved Repair Orders</h1>
@@ -758,6 +763,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=259"></script>
+  <script src="app.js?v=265"></script>
 </body>
 </html>

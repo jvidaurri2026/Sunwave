@@ -1,4 +1,4 @@
-const CACHE_NAME = "sunwave-tracker-v278";
+const CACHE_NAME = "sunwave-tracker-v284";
 const ASSETS = [
   "./",
   "./index.html",

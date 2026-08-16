@@ -247,6 +247,7 @@ def init_db():
               unit_year TEXT NOT NULL DEFAULT '',
               fuel_type TEXT NOT NULL DEFAULT '',
               service_code TEXT NOT NULL DEFAULT '',
+              is_tire INTEGER NOT NULL DEFAULT 0 CHECK(is_tire IN (0, 1)),
               updated_by TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -651,6 +652,11 @@ def init_db():
             conn.execute("ALTER TABLE shop_parts ADD COLUMN service_code TEXT NOT NULL DEFAULT ''")
         if "fuel_type" not in shop_part_columns:
             conn.execute("ALTER TABLE shop_parts ADD COLUMN fuel_type TEXT NOT NULL DEFAULT ''")
+        if "is_tire" not in shop_part_columns:
+            conn.execute("ALTER TABLE shop_parts ADD COLUMN is_tire INTEGER NOT NULL DEFAULT 0")
+        conn.execute(
+            "UPDATE shop_parts SET is_tire = 1 WHERE service_code = '500' OR LOWER(description) LIKE '%tire%'"
+        )
         shop_order_part_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_repair_order_parts)").fetchall()}
         if "vendor" not in shop_order_part_columns:
             conn.execute("ALTER TABLE shop_repair_order_parts ADD COLUMN vendor TEXT NOT NULL DEFAULT 'Unspecified'")
@@ -1270,7 +1276,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.reject_technician_request(
             allowed_paths={
-                "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-codes",
+                "/api/shop-parts", "/api/shop-part-lookup", "/api/shop-unit-types", "/api/shop-repair-codes",
                 "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-service-day-statuses",
                 "/api/shop-out-of-service", "/api/shop-part-orders"
             }
@@ -1337,7 +1343,7 @@ class Handler(SimpleHTTPRequestHandler):
         ):
             return
         if self.path not in ("/api/login", "/api/groupme/callback") and self.reject_technician_request(
-            allowed_paths={"/api/logout", "/api/shop-repair-orders"},
+            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-repair-orders"},
             allowed_prefixes=("/api/shop-service-schedules/",),
         ):
             return
@@ -1462,7 +1468,9 @@ class Handler(SimpleHTTPRequestHandler):
         if user is None or user["role"] != "Technician":
             return False
         allowed_paths = allowed_paths or set()
-        if self.path in allowed_paths or any(self.path.startswith(prefix) for prefix in allowed_prefixes):
+        request_path = urlparse(self.path).path.rstrip("/") or "/"
+        normalized_allowed_paths = {(path.rstrip("/") or "/") for path in allowed_paths}
+        if request_path in normalized_allowed_paths or any(request_path.startswith(prefix) for prefix in allowed_prefixes):
             return False
         self.send_json({"error": "Technician access is limited to assigned shop repairs."}, 403)
         return True
@@ -1538,6 +1546,15 @@ class Handler(SimpleHTTPRequestHandler):
             return None
         if user["role"] not in ("Admin", "Technician"):
             self.send_json({"error": "Only a technician or admin can change repair status."}, 403)
+            return None
+        return user
+
+    def require_shop_part_intake(self):
+        user = self.require_user()
+        if user is None:
+            return None
+        if user["role"] not in ("Admin", "Technician"):
+            self.send_json({"error": "Only an admin or technician can register shop parts."}, 403)
             return None
         return user
 
@@ -1891,7 +1908,7 @@ class Handler(SimpleHTTPRequestHandler):
             rows = conn.execute(
                 """
                 SELECT p.part_number, p.description, p.vendor, p.price_cents, p.quantity, p.unit_type, p.unit_year,
-                       p.fuel_type, p.service_code, p.updated_by, p.updated_at,
+                       p.fuel_type, p.service_code, p.is_tire, p.updated_by, p.updated_at,
                        GROUP_CONCAT(py.unit_year, '||') AS years
                 FROM shop_parts p
                 LEFT JOIN shop_part_years py ON py.part_number = p.part_number
@@ -1911,6 +1928,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "years": sorted((row["years"] or "").split("||"), reverse=True) if row["years"] else [],
                 "fuelType": row["fuel_type"] or "",
                 "serviceCode": row["service_code"] or "",
+                "isTire": bool(row["is_tire"]),
                 "updatedBy": row["updated_by"],
                 "updatedAt": row["updated_at"],
             }
@@ -1918,7 +1936,7 @@ class Handler(SimpleHTTPRequestHandler):
         ])
 
     def lookup_shop_part_online(self):
-        if self.require_admin() is None:
+        if self.require_shop_part_intake() is None:
             return
         query = str(parse_qs(urlparse(self.path).query).get("q", [""])[0]).strip()
         if not query:
@@ -1981,7 +1999,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({"query": query, "source": "UPCitemdb", "lookupType": lookup_type, "results": results})
 
     def save_shop_part(self):
-        user = self.require_admin()
+        user = self.require_shop_part_intake()
         if user is None:
             return
         data = self.read_json()
@@ -1994,6 +2012,7 @@ class Handler(SimpleHTTPRequestHandler):
         unit_year = unit_years[0] if unit_years else ""
         fuel_type = str(data.get("fuelType") or "").strip()
         service_code = str(data.get("serviceCode") or "").strip()
+        is_tire = 1 if data.get("isTire") is True else 0
         replace_quantity = data.get("replaceQuantity") is True
         try:
             price = Decimal(str(data.get("price") or "")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -2026,6 +2045,23 @@ class Handler(SimpleHTTPRequestHandler):
 
         now = iso_now()
         with connect() as conn:
+            if is_tire:
+                normalized_tire_number = re.sub(r"[^a-z0-9]", "", part_number.casefold())
+                tire_parts = conn.execute(
+                    "SELECT part_number FROM shop_parts WHERE is_tire = 1 OR service_code = '500' OR LOWER(description) LIKE '%tire%'"
+                ).fetchall()
+                duplicate_tire = next(
+                    (
+                        tire["part_number"] for tire in tire_parts
+                        if tire["part_number"].casefold() != part_number.casefold()
+                        and re.sub(r"[^a-z0-9]", "", tire["part_number"].casefold()) == normalized_tire_number
+                    ),
+                    None,
+                )
+                if duplicate_tire:
+                    return self.send_json({
+                        "error": f"This tire matches existing part {duplicate_tire}. Add quantity to that tire instead."
+                    }, 409)
             existing_part = conn.execute(
                 "SELECT description, quantity FROM shop_parts WHERE part_number = ? COLLATE NOCASE",
                 (part_number,),
@@ -2057,18 +2093,18 @@ class Handler(SimpleHTTPRequestHandler):
                 cursor = conn.execute(
                     """
                     UPDATE shop_parts
-                    SET description = ?, vendor = ?, price_cents = ?, quantity = ?, unit_type = ?, unit_year = ?, fuel_type = ?, service_code = ?, updated_by = ?, updated_at = ?
+                    SET description = ?, vendor = ?, price_cents = ?, quantity = ?, unit_type = ?, unit_year = ?, fuel_type = ?, service_code = ?, is_tire = ?, updated_by = ?, updated_at = ?
                     WHERE part_number = ? COLLATE NOCASE
                     """,
-                    (description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, user["username"], now, part_number),
+                    (description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, is_tire, user["username"], now, part_number),
                 )
                 if cursor.rowcount == 0:
                     return self.send_json({"error": "Part was not found. Refresh the list and try again."}, 404)
             else:
                 conn.execute(
                     """
-                    INSERT INTO shop_parts (part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, updated_by, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO shop_parts (part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, is_tire, updated_by, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(part_number) DO UPDATE SET
                       price_cents = excluded.price_cents,
                       description = excluded.description,
@@ -2078,10 +2114,11 @@ class Handler(SimpleHTTPRequestHandler):
                       unit_year = excluded.unit_year,
                       fuel_type = excluded.fuel_type,
                       service_code = excluded.service_code,
+                      is_tire = excluded.is_tire,
                       updated_by = excluded.updated_by,
                       updated_at = excluded.updated_at
                     """,
-                    (part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, user["username"], now),
+                    (part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, is_tire, user["username"], now),
                 )
             conn.execute("DELETE FROM shop_part_years WHERE part_number = ? COLLATE NOCASE", (part_number,))
             conn.executemany(
@@ -2089,7 +2126,7 @@ class Handler(SimpleHTTPRequestHandler):
                 [(part_number, year) for year in unit_years],
             )
             row = conn.execute(
-                "SELECT part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, updated_by, updated_at FROM shop_parts WHERE part_number = ? COLLATE NOCASE",
+                "SELECT part_number, description, vendor, price_cents, quantity, unit_type, unit_year, fuel_type, service_code, is_tire, updated_by, updated_at FROM shop_parts WHERE part_number = ? COLLATE NOCASE",
                 (part_number,),
             ).fetchone()
         self.send_json({
@@ -2104,6 +2141,7 @@ class Handler(SimpleHTTPRequestHandler):
             "years": unit_years,
             "fuelType": row["fuel_type"] or "",
             "serviceCode": row["service_code"] or "",
+            "isTire": bool(row["is_tire"]),
             "updatedBy": row["updated_by"],
             "updatedAt": row["updated_at"],
             "wasExisting": was_existing,
