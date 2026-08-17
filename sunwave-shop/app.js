@@ -129,7 +129,11 @@ if (session) {
   document.getElementById("dashboardExpenseVendorTab").addEventListener("click", () => setDashboardExpenseMode("vendor"));
   document.getElementById("dashboardExpenseInventoryTab").addEventListener("click", () => setDashboardExpenseMode("inventory"));
   document.querySelectorAll("[data-shop-page]").forEach((button) => {
-    button.addEventListener("click", () => setShopPage(button.dataset.shopPage));
+    button.addEventListener("click", () => {
+      const page = button.dataset.shopPage;
+      if (page === "repair-orders") prepareManualRepairOrder();
+      setShopPage(page);
+    });
   });
   if (isShopAdmin) {
     setShopPage("dashboard");
@@ -144,6 +148,18 @@ if (session) {
     setShopPage("dashboard");
     Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders(), loadShopBadTires(), loadWhatsAppSettings()]).then(loadParts);
   }
+}
+
+function prepareManualRepairOrder() {
+  activeScheduleRepairId = null;
+  const form = document.getElementById("repairOrderForm");
+  if (!form) return;
+  form.reset();
+  document.getElementById("repairOrderTechnician").value = session.user.name;
+  document.getElementById("repairOrderDate").value = localDateValue();
+  document.getElementById("repairOrderMessage").textContent = "New repair order. This order will be saved as Completed.";
+  updateRepairOrderUsageRequirements();
+  renderRepairOrderParts();
 }
 
 function updateDashboardPartPickupFields() {
@@ -1240,7 +1256,7 @@ async function updateOutOfServiceReport(report, row) {
 
 function setShopPage(page) {
   if (page !== "smart-part-intake") stopSmartPartScan();
-  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "smart-part-intake", "repair-orders", "out-of-service", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
+  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "smart-part-intake", "unit-types", "repair-orders", "out-of-service", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (isShopViewer && !["dashboard", "orders-history", "current-inventory", "tire-inventory", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (!isShopAdmin && !isShopViewer && !isShopTechnician && !["schedule-service", "scheduled-repairs"].includes(page)) page = "schedule-service";
   document.querySelectorAll("[data-shop-page-view]").forEach((section) => {
@@ -1613,13 +1629,13 @@ function renderUnitTypes() {
       <td>${escapeHtml(item.model)}</td>
       <td>${escapeHtml(item.vin)}</td>
       <td>${escapeHtml(item.tireSize || "Not set")}</td>
-      <td class="table-actions">
+      <td class="table-actions">${isShopAdmin ? `
         <button class="table-action edit-unit" type="button">Edit</button>
-        <button class="table-action danger-action delete-unit" type="button">Delete</button>
+        <button class="table-action danger-action delete-unit" type="button">Delete</button>` : "Admin only"}
       </td>
     `;
-    row.querySelector(".edit-unit").addEventListener("click", () => editUnitType(item));
-    row.querySelector(".delete-unit").addEventListener("click", () => deleteUnitType(item));
+    row.querySelector(".edit-unit")?.addEventListener("click", () => editUnitType(item));
+    row.querySelector(".delete-unit")?.addEventListener("click", () => deleteUnitType(item));
     list.append(row);
   });
   document.getElementById("unitTypesTotal").textContent = `${unitTypes.length} unit${unitTypes.length === 1 ? "" : "s"}`;
@@ -2419,9 +2435,7 @@ function renderServiceSchedules() {
     const item = document.createElement("tr");
     item.className = `schedule-row status-${schedule.status.toLowerCase().replaceAll(" ", "-")}`;
     const canChangeStatus = isShopAdmin || isShopTechnician;
-    const statusOptions = isShopTechnician
-      ? [...new Set([schedule.status, "Working on it"])]
-      : ["Scheduled", "Working on it", "Completed", "Cancelled"];
+    const statusOptions = ["Scheduled", "Working on it", "Completed", "Cancelled"];
     const statusControl = canChangeStatus ? `
         <select class="table-status-select" data-schedule-id="${Number(schedule.id)}">
           ${statusOptions.map((status) =>

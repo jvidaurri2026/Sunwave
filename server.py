@@ -786,6 +786,9 @@ def init_db():
         shop_order_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_repair_orders)").fetchall()}
         if "driver_name" not in shop_order_columns:
             conn.execute("ALTER TABLE shop_repair_orders ADD COLUMN driver_name TEXT NOT NULL DEFAULT ''")
+        conn.execute(
+            "UPDATE shop_repair_orders SET status = 'Completed' WHERE source = 'Repair Order' AND status = 'Working on it'"
+        )
         shop_schedule_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_service_schedules)").fetchall()}
         if "repair_order_id" not in shop_schedule_columns:
             conn.execute("ALTER TABLE shop_service_schedules ADD COLUMN repair_order_id INTEGER REFERENCES shop_repair_orders(id)")
@@ -1392,7 +1395,7 @@ class Handler(SimpleHTTPRequestHandler):
         ):
             return
         if self.path not in ("/api/login", "/api/groupme/callback") and self.reject_technician_request(
-            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-repair-orders"},
+            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-orders"},
             allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-bad-tires/"),
         ):
             return
@@ -2254,7 +2257,7 @@ class Handler(SimpleHTTPRequestHandler):
         ])
 
     def save_shop_unit_type(self):
-        user = self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         data = self.read_json()
@@ -2279,6 +2282,12 @@ class Handler(SimpleHTTPRequestHandler):
         if not model or not vin or not tire_size:
             return self.send_json({"error": "Model, VIN, and tire size are required."}, 400)
         with connect() as conn:
+            existing = conn.execute(
+                "SELECT id FROM shop_unit_types WHERE asset_number = ? COLLATE NOCASE",
+                (asset_number,),
+            ).fetchone()
+            if user["role"] == "Technician" and existing is not None:
+                return self.send_json({"error": "Technicians can add new units but only an admin can update an existing unit."}, 403)
             try:
                 conn.execute(
                     """
@@ -3184,7 +3193,7 @@ class Handler(SimpleHTTPRequestHandler):
                 (today, iso_now(), today),
             )
             schedules = conn.execute(
-                "SELECT * FROM shop_service_schedules WHERE status NOT IN ('Completed', 'Cancelled') ORDER BY scheduled_date, scheduled_time, id"
+                "SELECT * FROM shop_service_schedules ORDER BY scheduled_date DESC, scheduled_time, id DESC"
             ).fetchall()
             result = []
             for schedule in schedules:
@@ -3332,8 +3341,6 @@ class Handler(SimpleHTTPRequestHandler):
         status = str(self.read_json().get("status") or "").strip()
         if status not in ("Scheduled", "Working on it", "Completed", "Cancelled"):
             return self.send_json({"error": "Select a valid status."}, 400)
-        if user["role"] == "Technician" and status not in ("Working on it", "Completed"):
-            return self.send_json({"error": "Technicians can only start or complete a repair."}, 403)
         with connect() as conn:
             schedule = conn.execute(
                 "SELECT * FROM shop_service_schedules WHERE id = ?",
@@ -3343,9 +3350,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.send_json({"error": "Scheduled repair was not found."}, 404)
             technician_username = schedule["technician_username"] or ""
             technician_name = schedule["technician_name"] or "Unassigned"
+            if user["role"] == "Technician" and technician_username and technician_username != user["username"]:
+                return self.send_json({"error": f"This repair is already assigned to {technician_name}."}, 409)
             if status in ("Working on it", "Completed"):
-                if user["role"] == "Technician" and technician_username and technician_username != user["username"]:
-                    return self.send_json({"error": f"This repair is already assigned to {technician_name}."}, 409)
                 if not technician_username:
                     technician_username = user["username"]
                     technician_name = user["name"]

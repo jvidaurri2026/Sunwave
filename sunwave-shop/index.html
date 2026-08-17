@@ -29,7 +29,7 @@
         <button type="button" data-shop-page="tire-inventory" data-admin-only data-shop-readable data-technician-readable>Tire Inventory</button>
         <button type="button" data-shop-page="parts" data-admin-only>Parts Inventory</button>
         <button type="button" data-shop-page="smart-part-intake" data-admin-only data-technician-readable>Smart Part Intake</button>
-        <button type="button" data-shop-page="unit-types" data-admin-only>Units</button>
+        <button type="button" data-shop-page="unit-types" data-admin-only data-technician-readable>Units</button>
         <button type="button" data-shop-page="repair-codes" data-admin-only>Repair Codes</button>
         <button type="button" data-shop-page="whatsapp-settings" data-admin-only>WhatsApp Settings</button>
         <button type="button" data-shop-page="repair-orders" data-admin-only data-technician-readable>Repair Order</button>
@@ -753,6 +753,8 @@
               <option value="__all">All statuses</option>
               <option>Scheduled</option>
               <option>Working on it</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
             </select>
           </label>
         </div>
@@ -788,6 +790,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=272"></script>
+  <script src="app.js?v=275"></script>
 </body>
 </html>
