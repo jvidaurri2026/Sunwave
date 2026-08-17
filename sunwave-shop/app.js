@@ -68,7 +68,7 @@ if (session) {
     element.hidden = !isShopAdmin && !technicianCanUse;
   });
   document.querySelectorAll("[data-scheduler-only]").forEach((element) => {
-    element.hidden = isShopTechnician;
+    element.hidden = !(isShopAdmin || isShopScheduler || (isShopTechnician && element.hasAttribute("data-technician-scheduler")));
   });
   if (!isShopAdmin) {
     const exitLink = document.getElementById("shopExitLink");
@@ -298,7 +298,7 @@ function renderShopPartOrders() {
     const tireRepair = item.purchaseType === "Tire Repair" || linkedTireOrderIds.has(Number(item.id));
     const receiveAction = item.legacyTireRepair
       ? "Recorded in Tire Inventory"
-      : isShopAdmin
+      : isShopAdmin || isShopTechnician
       ? `<div class="receive-part-action"><input class="receive-part-date" type="date" value="${localDateValue()}" aria-label="Pickup date"><button class="table-action" type="button">Order Received</button></div>`
       : "Read only";
     const typeLabel = tireRepair ? "Tire Repair" : item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
@@ -1256,7 +1256,7 @@ async function updateOutOfServiceReport(report, row) {
 
 function setShopPage(page) {
   if (page !== "smart-part-intake") stopSmartPartScan();
-  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "smart-part-intake", "unit-types", "repair-orders", "out-of-service", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
+  if (isShopTechnician && !["dashboard", "current-inventory", "tire-inventory", "smart-part-intake", "unit-types", "repair-orders", "out-of-service", "saved-repair-orders", "unit-repair-history", "schedule-service", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (isShopViewer && !["dashboard", "orders-history", "current-inventory", "tire-inventory", "saved-repair-orders", "unit-repair-history", "scheduled-repairs"].includes(page)) page = "dashboard";
   else if (!isShopAdmin && !isShopViewer && !isShopTechnician && !["schedule-service", "scheduled-repairs"].includes(page)) page = "schedule-service";
   document.querySelectorAll("[data-shop-page-view]").forEach((section) => {

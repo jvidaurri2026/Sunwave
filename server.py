@@ -694,21 +694,17 @@ def init_db():
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_bad_tires_repair_part ON shop_bad_tires (repair_order_id, part_number COLLATE NOCASE)"
         )
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO shop_bad_tires (
-              repair_order_id, part_number, description, asset_number, quantity,
-              status, taken_for_repair_date, created_by, created_at, updated_by, updated_at
+        historical_tire_cleanup = conn.execute(
+            "SELECT 1 FROM app_settings WHERE key = 'shop_bad_tire_existing_orders_cleared_v1'"
+        ).fetchone()
+        if historical_tire_cleanup is None:
+            conn.execute(
+                "DELETE FROM shop_bad_tires WHERE status = 'Waiting to Be Taken for Repair' AND part_order_id IS NULL"
             )
-            SELECT rop.repair_order_id, rop.part_number, rop.description, ro.asset_number, rop.quantity,
-                   'Waiting to Be Taken for Repair', '', ro.technician_username, ro.created_at,
-                   ro.technician_username, ro.created_at
-            FROM shop_repair_order_parts rop
-            JOIN shop_repair_orders ro ON ro.id = rop.repair_order_id
-            JOIN shop_parts p ON p.part_number = rop.part_number COLLATE NOCASE
-            WHERE p.is_tire = 1
-            """
-        )
+            conn.execute(
+                "INSERT INTO app_settings (key, value, updated_at) VALUES ('shop_bad_tire_existing_orders_cleared_v1', 'complete', ?)",
+                (iso_now(),),
+            )
         conn.execute(
             """
             INSERT OR IGNORE INTO shop_part_years (part_number, unit_year)
@@ -1395,8 +1391,8 @@ class Handler(SimpleHTTPRequestHandler):
         ):
             return
         if self.path not in ("/api/login", "/api/groupme/callback") and self.reject_technician_request(
-            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-orders"},
-            allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-bad-tires/"),
+            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-part-orders"},
+            allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-bad-tires/", "/api/shop-part-orders/"),
         ):
             return
         if self.path == "/api/login":
@@ -1581,7 +1577,7 @@ class Handler(SimpleHTTPRequestHandler):
         user = self.require_user()
         if user is None:
             return None
-        if user["role"] not in ("Admin", "Scheduler"):
+        if user["role"] not in ("Admin", "Scheduler", "Technician"):
             self.send_json({"error": "You do not have permission to schedule shop services."}, 403)
             return None
         return user
@@ -2893,7 +2889,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json([self.shop_part_order_payload(row) for row in rows])
 
     def save_shop_part_order(self):
-        user = self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         data = self.read_json()
@@ -2962,7 +2958,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json({**self.shop_part_order_payload(row), **inventory_result}, 201)
 
     def receive_shop_part_order(self, record_id):
-        user = self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         try:

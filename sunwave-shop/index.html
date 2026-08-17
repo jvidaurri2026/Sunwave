@@ -36,7 +36,7 @@
         <button type="button" data-shop-page="out-of-service" data-admin-only data-technician-readable>Out of Service</button>
         <button type="button" data-shop-page="saved-repair-orders" data-admin-only data-shop-readable data-technician-readable>Saved Repair Orders</button>
         <button type="button" data-shop-page="unit-repair-history" data-admin-only data-shop-readable data-technician-readable>Unit Repair History</button>
-        <button type="button" data-shop-page="schedule-service" data-scheduler-only>Schedule Service</button>
+        <button type="button" data-shop-page="schedule-service" data-scheduler-only data-technician-scheduler>Schedule Service</button>
         <button type="button" data-shop-page="scheduled-repairs">Scheduled Repairs</button>
       </nav>
       <section id="shopDashboardPage" class="shop-dashboard" data-shop-page-view="dashboard" data-admin-only data-shop-readable data-technician-readable>
@@ -94,7 +94,7 @@
         </section>
         <section class="shop-panel dashboard-part-orders">
           <div class="panel-heading"><h2>Parts Ordered or Picked Up Today</h2><span id="dashboardPartOrderTotal">0 records</span></div>
-          <form id="dashboardPartOrderForm" class="dashboard-part-order-form" data-shop-admin-action>
+          <form id="dashboardPartOrderForm" class="dashboard-part-order-form" data-shop-admin-action data-technician-action>
             <label>Expense type<select id="dashboardPartPurchaseType"><option value="Unit Part">For a Unit</option><option value="Tire Inventory">Tire Inventory</option><option value="Job Material">Material for Jobs</option></select></label>
             <label id="dashboardPartOrderUnitLabel">Unit<select id="dashboardPartOrderUnit"><option value="">Select unit</option></select></label>
             <label id="dashboardPartOrderNumberLabel">Part number<input id="dashboardPartOrderNumber" autocomplete="off"></label>
@@ -790,6 +790,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=276"></script>
+  <script src="app.js?v=279"></script>
 </body>
 </html>
