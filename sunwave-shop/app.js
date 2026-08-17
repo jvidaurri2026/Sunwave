@@ -2426,9 +2426,12 @@ function dateInputValue(date) {
 
 function renderServiceSchedules() {
   const filter = document.getElementById("serviceScheduleStatusFilter").value;
+  const visibleSchedules = isShopTechnician
+    ? serviceSchedules.filter((schedule) => schedule.date === localDateValue())
+    : serviceSchedules;
   const schedules = filter === "__all"
-    ? serviceSchedules
-    : serviceSchedules.filter((schedule) => schedule.status === filter);
+    ? visibleSchedules
+    : visibleSchedules.filter((schedule) => schedule.status === filter);
   const list = document.getElementById("serviceSchedulesList");
   list.replaceChildren();
   schedules.forEach((schedule) => {
@@ -2462,7 +2465,9 @@ function renderServiceSchedules() {
     item.querySelector(".delete-booking-button")?.addEventListener("click", () => deleteServiceSchedule(schedule));
     list.append(item);
   });
-  document.getElementById("serviceSchedulesTotal").textContent = `${schedules.length} scheduled repair${schedules.length === 1 ? "" : "s"}`;
+  document.getElementById("serviceSchedulesTotal").textContent = isShopTechnician
+    ? `${schedules.length} repair${schedules.length === 1 ? "" : "s"} today`
+    : `${schedules.length} scheduled repair${schedules.length === 1 ? "" : "s"}`;
   document.getElementById("serviceSchedulesEmpty").hidden = schedules.length > 0;
 }
 
