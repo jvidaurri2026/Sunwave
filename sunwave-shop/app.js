@@ -7,6 +7,7 @@ let serviceSchedules = [];
 let serviceDayStatuses = [];
 let outOfServiceReports = [];
 let shopPartOrders = [];
+let badTires = [];
 let editingPartNumber = "";
 let editingRepairCode = "";
 let editingUnitId = null;
@@ -62,7 +63,8 @@ if (session) {
     element.hidden = !isShopAdmin && !viewerCanRead && !technicianCanRead;
   });
   document.querySelectorAll("[data-shop-admin-action]").forEach((element) => {
-    element.hidden = !isShopAdmin;
+    const technicianCanUse = isShopTechnician && element.hasAttribute("data-technician-action");
+    element.hidden = !isShopAdmin && !technicianCanUse;
   });
   document.querySelectorAll("[data-scheduler-only]").forEach((element) => {
     element.hidden = isShopTechnician;
@@ -100,6 +102,7 @@ if (session) {
   document.getElementById("unitRepairHistoryAsset").addEventListener("change", renderUnitRepairHistory);
   document.getElementById("shareTodayRepairsWhatsapp").addEventListener("click", shareTodayRepairsWhatsapp);
   document.getElementById("shareDashboardWhatsapp").addEventListener("click", shareDashboardWhatsappReport);
+  document.getElementById("shareTireInventoryWhatsapp").addEventListener("click", shareTireInventoryWhatsappReport);
   document.getElementById("whatsappSettingsForm").addEventListener("submit", saveWhatsAppSettings);
   document.getElementById("testWhatsappConnectionButton").addEventListener("click", testWhatsAppConnection);
   document.getElementById("outOfServiceForm").addEventListener("submit", saveOutOfServiceReport);
@@ -129,16 +132,16 @@ if (session) {
   });
   if (isShopAdmin) {
     setShopPage("dashboard");
-    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders(), loadWhatsAppSettings()]).then(loadParts);
+    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders(), loadShopBadTires(), loadWhatsAppSettings()]).then(loadParts);
   } else if (isShopViewer) {
     setShopPage("dashboard");
-    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders()]).then(loadParts);
+    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders(), loadShopBadTires()]).then(loadParts);
   } else if (isShopScheduler) {
     setShopPage("schedule-service");
     Promise.all([loadUnitTypes(), loadRepairCodes(), loadServiceSchedules(), loadServiceDayStatuses()]);
   } else {
     setShopPage("dashboard");
-    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders()]).then(loadParts);
+    Promise.all([loadUnitTypes(), loadRepairCodes(), loadRepairOrders(), loadServiceSchedules(), loadServiceDayStatuses(), loadOutOfServiceReports(), loadShopPartOrders(), loadShopBadTires(), loadWhatsAppSettings()]).then(loadParts);
   }
 }
 
@@ -194,6 +197,18 @@ async function loadShopPartOrders() {
   }
 }
 
+async function loadShopBadTires() {
+  if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
+  try {
+    badTires = await shopApi("/api/shop-bad-tires");
+    renderTireInventoryPage();
+    renderShopPartOrders();
+  } catch (error) {
+    const message = document.getElementById("badTiresMessage");
+    if (message) message.textContent = error.message;
+  }
+}
+
 async function saveDashboardPartOrder(event) {
   event.preventDefault();
   const message = document.getElementById("dashboardPartOrderMessage");
@@ -227,14 +242,33 @@ async function saveDashboardPartOrder(event) {
       : result.inventoryPartMissing
         ? `${result.partNumber} was received, but it is not registered in Parts Inventory yet.`
         : pickedUp ? "Received part saved." : "Part saved as Waiting for Order.";
-    await loadShopPartOrders();
+    await Promise.all([loadShopPartOrders(), ...(result.purchaseType === "Tire Inventory" ? [loadShopBadTires(), loadParts()] : [])]);
   } catch (error) {
     message.textContent = error.message;
   }
 }
 
 function renderShopPartOrders() {
-  const waiting = shopPartOrders.filter((item) => item.status === "Waiting for Order");
+  const linkedTireOrderIds = new Set(
+    badTires.map((item) => Number(item.partOrderId || 0)).filter(Boolean)
+  );
+  const olderTakenTires = badTires
+    .filter((item) => item.status === "Taken for Repair" && !linkedTireOrderIds.has(Number(item.partOrderId || 0)) && !item.partOrderId)
+    .map((item) => ({
+      id: `bad-tire-${item.id}`,
+      purchaseType: "Tire Repair",
+      assetNumber: item.assetNumber,
+      partNumber: item.partNumber,
+      description: `${item.serviceType || "Tire repair"} - ${item.description || "Tire"}`,
+      vendor: item.vendor,
+      quantity: item.quantity,
+      totalPrice: item.totalPrice || "0.00",
+      orderDate: item.takenForRepairDate || item.createdAt?.slice(0, 10) || "",
+      createdBy: item.updatedBy || item.createdBy || "",
+      status: "Waiting for Order",
+      legacyTireRepair: true
+    }));
+  const waiting = [...shopPartOrders.filter((item) => item.status === "Waiting for Order"), ...olderTakenTires];
   const today = localDateValue();
   const received = shopPartOrders.filter((item) => item.status === "Order Received" && item.pickupDate === today);
   const waitingBody = document.getElementById("dashboardWaitingParts");
@@ -244,17 +278,22 @@ function renderShopPartOrders() {
   waiting.forEach((item) => {
     const row = document.createElement("tr");
     const itemName = item.purchaseType === "Job Material" ? item.description : `${item.partNumber} - ${item.description}`;
-    const receiveAction = isShopAdmin
+    const tireRepair = item.purchaseType === "Tire Repair" || linkedTireOrderIds.has(Number(item.id));
+    const receiveAction = item.legacyTireRepair
+      ? "Recorded in Tire Inventory"
+      : isShopAdmin
       ? `<div class="receive-part-action"><input class="receive-part-date" type="date" value="${localDateValue()}" aria-label="Pickup date"><button class="table-action" type="button">Order Received</button></div>`
       : "Read only";
-    row.innerHTML = `<td>${escapeHtml(item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part")}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td><strong>${escapeHtml(itemName)}</strong></td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.createdBy)}</td><td>${receiveAction}</td>`;
+    const typeLabel = tireRepair ? "Tire Repair" : item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
+    row.innerHTML = `<td>${escapeHtml(typeLabel)}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td><strong>${escapeHtml(itemName)}</strong></td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.createdBy)}</td><td>${receiveAction}</td>`;
     row.querySelector("button")?.addEventListener("click", () => receiveDashboardPartOrder(item, row));
     waitingBody.append(row);
   });
   received.forEach((item) => {
     const row = document.createElement("tr");
     const itemName = item.purchaseType === "Job Material" ? item.description : `${item.partNumber} - ${item.description}`;
-    row.innerHTML = `<td><strong>${escapeHtml(item.pickupDate)}</strong></td><td>${escapeHtml(item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part")}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td>${escapeHtml(itemName)}</td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.updatedBy)}</td>`;
+    const typeLabel = linkedTireOrderIds.has(Number(item.id)) ? "Tire Repair" : item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
+    row.innerHTML = `<td><strong>${escapeHtml(item.pickupDate)}</strong></td><td>${escapeHtml(typeLabel)}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td>${escapeHtml(itemName)}</td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.updatedBy)}</td>`;
     receivedBody.append(row);
   });
   const dashboardRecordCount = waiting.length + received.length;
@@ -329,7 +368,7 @@ async function receiveDashboardPartOrder(item, row) {
       : result.inventoryPartMissing
         ? `${item.partNumber} was received, but it is not registered in Parts Inventory yet.`
         : `${item.partNumber || "Material"} moved to Received Parts.`;
-    await loadShopPartOrders();
+    await Promise.all([loadShopPartOrders(), ...(item.purchaseType === "Tire Inventory" ? [loadShopBadTires(), loadParts()] : [])]);
   } catch (error) {
     message.textContent = error.message;
   }
@@ -366,13 +405,14 @@ async function shopApi(path, options = {}) {
 }
 
 async function loadWhatsAppSettings() {
-  if (!isShopAdmin) return;
+  if (!isShopAdmin && !isShopTechnician) return;
   const message = document.getElementById("whatsappSettingsMessage");
   try {
     const settings = await shopApi("/api/shop-whatsapp-settings");
+    document.getElementById("whatsappRecipientNumber").value = settings.recipientNumber || "";
+    if (isShopTechnician) return;
     document.getElementById("whatsappEnabled").checked = Boolean(settings.enabled);
     document.getElementById("whatsappPhoneNumberId").value = settings.phoneNumberId || "";
-    document.getElementById("whatsappRecipientNumber").value = settings.recipientNumber || "";
     document.getElementById("whatsappApiVersion").value = settings.apiVersion || "v23.0";
     document.getElementById("whatsappCallbackUrl").value = `${window.location.origin}/api/whatsapp/webhook`;
     document.getElementById("whatsappAccessToken").value = "";
@@ -832,6 +872,84 @@ function renderTireInventoryPage() {
     `).join("")}
   `).join("");
   document.getElementById("tireInventoryEmpty").hidden = tires.length > 0;
+  renderBadTires();
+}
+
+function renderBadTires() {
+  const waiting = badTires.filter((item) => item.status === "Waiting to Be Taken for Repair");
+  const taken = badTires.filter((item) => item.status === "Taken for Repair");
+  const waitingQuantity = waiting.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+  document.getElementById("badTiresWaitingQuantity").textContent = waitingQuantity;
+  document.getElementById("badTiresWaitingTotal").textContent = `${waiting.length} record${waiting.length === 1 ? "" : "s"}`;
+  document.getElementById("badTiresTakenTotal").textContent = `${taken.length} record${taken.length === 1 ? "" : "s"}`;
+
+  const waitingTable = document.getElementById("badTiresWaitingTable");
+  waitingTable.innerHTML = waiting.map((item) => `
+    <tr>
+      <td><strong>${escapeHtml(item.assetNumber)}</strong></td>
+      <td>${escapeHtml(item.partNumber)}</td>
+      <td class="table-cell-lines">${escapeHtml(item.description || "No description")}</td>
+      <td><strong>${Number(item.quantity)}</strong></td>
+      <td>${escapeHtml(item.mechanic || "Unassigned")}</td>
+      <td><span class="bad-tire-status waiting">${escapeHtml(item.status)}</span></td>
+      <td>${isShopAdmin || isShopTechnician ? `
+        <div class="bad-tire-repair-form">
+          <select aria-label="Tire repair type"><option value="">Select service</option><option>Fix Flat</option><option>Replace Tire</option></select>
+          <input type="text" placeholder="Repair shop / vendor" aria-label="Repair shop or vendor">
+          <input type="number" min="0.01" step="0.01" placeholder="Cost each" aria-label="Cost per tire">
+          <input type="date" value="${localDateValue()}" aria-label="Date taken for repair">
+          <button class="table-action" type="button" data-bad-tire-id="${item.id}">Take for Repair</button>
+        </div>` : "View only"}</td>
+    </tr>
+  `).join("");
+  waitingTable.querySelectorAll("button[data-bad-tire-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const form = button.closest(".bad-tire-repair-form");
+      takeBadTireForRepair(button.dataset.badTireId, {
+        serviceType: form.querySelector("select").value,
+        vendor: form.querySelector("input[type='text']").value.trim(),
+        unitPrice: form.querySelector("input[type='number']").value,
+        takenForRepairDate: form.querySelector("input[type='date']").value
+      }, button);
+    });
+  });
+
+  document.getElementById("badTiresTakenTable").innerHTML = taken.map((item) => `
+    <tr>
+      <td><strong>${escapeHtml(item.takenForRepairDate || "Not recorded")}</strong></td>
+      <td><strong>${escapeHtml(item.assetNumber)}</strong></td>
+      <td>${escapeHtml(item.partNumber)}</td>
+      <td>${escapeHtml(item.serviceType || "Not recorded")}</td>
+      <td>${escapeHtml(item.vendor || "Unspecified")}</td>
+      <td><strong>${Number(item.quantity)}</strong></td>
+      <td><strong>$${escapeHtml(item.totalPrice || "0.00")}</strong></td>
+      <td><span class="bad-tire-status ${item.partOrderStatus === "Order Received" ? "received" : "waiting"}">${escapeHtml(item.partOrderStatus === "Order Received" ? "Repair Received" : "Waiting for Repair Return")}</span></td>
+      <td>${escapeHtml(item.updatedBy || "")}</td>
+    </tr>
+  `).join("");
+  document.getElementById("badTiresWaitingEmpty").hidden = waiting.length > 0;
+  document.getElementById("badTiresTakenEmpty").hidden = taken.length > 0;
+}
+
+async function takeBadTireForRepair(recordId, details, button) {
+  const message = document.getElementById("badTiresMessage");
+  if (!details.serviceType || !details.vendor || !details.unitPrice || !details.takenForRepairDate) {
+    message.textContent = "Select the service and enter the repair shop, cost, and date.";
+    return;
+  }
+  button.disabled = true;
+  message.textContent = "Updating bad tire status...";
+  try {
+    await shopApi(`/api/shop-bad-tires/${encodeURIComponent(recordId)}/status`, {
+      method: "POST",
+      body: JSON.stringify({ status: "Taken for Repair", ...details })
+    });
+    message.textContent = "Tires moved to Taken for Repair and added to Parts Ordered.";
+    await Promise.all([loadShopBadTires(), loadShopPartOrders()]);
+  } catch (error) {
+    message.textContent = error.message;
+    button.disabled = false;
+  }
 }
 
 async function savePart(event) {
@@ -2070,6 +2188,45 @@ function shareDashboardWhatsappReport() {
   document.getElementById("dashboardWhatsappMessage").textContent = recipient
     ? `Today's operations report is ready for WhatsApp recipient ending in ${recipient.slice(-4)}.`
     : "Today's operations report is ready. Select a WhatsApp recipient.";
+  window.open(`${baseUrl}?text=${encodeURIComponent(report)}`, "_blank", "noopener,noreferrer");
+}
+
+function buildTireInventoryWhatsappReport() {
+  const tireInventory = inventoryParts.filter(isTirePart).filter((part) => Number(part.quantity || 0) > 0);
+  const waiting = badTires.filter((item) => item.status === "Waiting to Be Taken for Repair");
+  const taken = badTires.filter((item) => item.status === "Taken for Repair");
+  const tireOrders = shopPartOrders.filter((item) => item.purchaseType === "Tire Inventory");
+  const lines = [`Sunwave Shop Tire Report - ${localDateValue()}`];
+
+  lines.push("", "Current Tire Inventory");
+  if (tireInventory.length) {
+    tireInventory.forEach((part) => lines.push(`${Number(part.quantity)} - ${part.partNumber} - ${part.description || "Tire"}`));
+  } else lines.push("No usable tires in inventory.");
+
+  lines.push("", "Bad Tires Waiting to Be Taken for Repair");
+  if (waiting.length) {
+    waiting.forEach((item) => lines.push(`${Number(item.quantity)} - ${item.partNumber} - Unit ${item.assetNumber} - ${item.description || "Tire"}`));
+  } else lines.push("No bad tires waiting.");
+
+  lines.push("", "Tires Taken for Repair");
+  if (taken.length) {
+    taken.forEach((item) => lines.push(`${Number(item.quantity)} - ${item.partNumber} - Unit ${item.assetNumber} - ${item.serviceType} - ${item.vendor} - $${item.totalPrice} - ${item.partOrderStatus === "Order Received" ? "Repair Received" : "Waiting for Repair Return"}`));
+  } else lines.push("No tires have been taken for repair.");
+
+  lines.push("", "Tire Parts Ordered / Repair Expenses");
+  if (tireOrders.length) {
+    tireOrders.forEach((item) => lines.push(`${Number(item.quantity)} - ${item.partNumber} - ${item.description} - ${item.vendor || "Unspecified"} - $${item.totalPrice} - ${item.status === "Order Received" ? "Received" : "Waiting"}`));
+  } else lines.push("No tire repair or replacement orders.");
+  return lines.join("\n");
+}
+
+function shareTireInventoryWhatsappReport() {
+  const recipient = document.getElementById("whatsappRecipientNumber").value.replace(/\D/g, "");
+  const baseUrl = recipient ? `https://wa.me/${recipient}` : "https://wa.me/";
+  const report = buildTireInventoryWhatsappReport();
+  document.getElementById("badTiresMessage").textContent = recipient
+    ? `Tire report is ready for WhatsApp recipient ending in ${recipient.slice(-4)}.`
+    : "Tire report is ready. Select a WhatsApp recipient.";
   window.open(`${baseUrl}?text=${encodeURIComponent(report)}`, "_blank", "noopener,noreferrer");
 }
 

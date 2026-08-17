@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#7b1e3a">
   <title>Sunwave Shop</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=266">
+  <link rel="stylesheet" href="styles.css?v=270">
 </head>
 <body>
   <main class="shop-shell">
@@ -44,7 +44,7 @@
           <div><h1>Service Dashboard</h1><p>Current workload, completed service, and parts spending.</p></div>
           <div class="dashboard-report-actions">
             <span id="dashboardUpdatedAt"></span>
-            <button id="shareDashboardWhatsapp" type="button" data-shop-admin-action>Send Today's Operations by WhatsApp</button>
+            <button id="shareDashboardWhatsapp" type="button" data-shop-admin-action data-technician-action>Send Today's Operations by WhatsApp</button>
           </div>
         </div>
         <p id="dashboardWhatsappMessage" class="form-message" role="status"></p>
@@ -114,7 +114,7 @@
           <p id="dashboardPartOrderMessage" class="form-message" role="status"></p>
           <div class="parts-order-columns">
             <section>
-              <div class="panel-heading"><h3>Waiting for Order</h3><span id="dashboardWaitingPartsTotal">0 waiting</span></div>
+              <div class="panel-heading"><h3>Ordered Parts</h3><span id="dashboardWaitingPartsTotal">0 waiting</span></div>
               <div class="table-wrap"><table><thead><tr><th>Type</th><th>Unit</th><th>Material or part</th><th>Vendor</th><th>Qty</th><th>Expense</th><th>Order date</th><th>Entered by</th><th>Receive</th></tr></thead><tbody id="dashboardWaitingParts"></tbody></table></div>
               <p id="dashboardWaitingPartsEmpty" class="empty-state">No parts are waiting for an order.</p>
             </section>
@@ -281,12 +281,16 @@
       <section id="tireInventoryPage" class="current-inventory-page" data-shop-page-view="tire-inventory" data-admin-only data-shop-readable data-technician-readable hidden>
         <div class="dashboard-heading">
           <div><h1>Tire Inventory</h1><p>Current tire stock, sizes, and inventory value.</p></div>
-          <span id="tireInventoryUpdatedAt"></span>
+          <div class="dashboard-report-actions">
+            <span id="tireInventoryUpdatedAt"></span>
+            <button id="shareTireInventoryWhatsapp" type="button" data-shop-admin-action data-technician-action>Send Tire Report by WhatsApp</button>
+          </div>
         </div>
         <section class="inventory-value-summary" aria-label="Tire inventory totals">
           <article><span>Tire part numbers</span><strong id="tireInventoryPartCount">0</strong></article>
           <article><span>Tires in stock</span><strong id="tireInventoryQuantity">0</strong></article>
           <article><span>Tire inventory value</span><strong id="tireInventoryValue">$0.00</strong></article>
+          <article><span>Bad tires waiting</span><strong id="badTiresWaitingQuantity">0</strong></article>
         </section>
         <section class="shop-panel">
           <div class="panel-heading"><h2>Quantity by Unit Type</h2><span id="tireInventoryChartTotal">0 tires</span></div>
@@ -301,6 +305,27 @@
             </table>
           </div>
           <p id="tireInventoryEmpty" class="empty-state">No tires are currently in inventory.</p>
+        </section>
+        <section class="shop-panel current-inventory-table bad-tire-panel">
+          <div class="panel-heading"><h2>Bad Tires Waiting to Be Taken for Repair</h2><span id="badTiresWaitingTotal">0 records</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Unit</th><th>Part number / Size</th><th>Description</th><th>Qty</th><th>Mechanic</th><th>Status</th><th>Repair details</th></tr></thead>
+              <tbody id="badTiresWaitingTable"></tbody>
+            </table>
+          </div>
+          <p id="badTiresWaitingEmpty" class="empty-state">No bad tires are waiting to be taken for repair.</p>
+          <p id="badTiresMessage" class="form-message" role="status"></p>
+        </section>
+        <section class="shop-panel current-inventory-table bad-tire-panel">
+          <div class="panel-heading"><h2>Taken for Repair</h2><span id="badTiresTakenTotal">0 records</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Taken date</th><th>Unit</th><th>Part number / Size</th><th>Service</th><th>Vendor</th><th>Qty</th><th>Cost</th><th>Parts-order status</th><th>Updated by</th></tr></thead>
+              <tbody id="badTiresTakenTable"></tbody>
+            </table>
+          </div>
+          <p id="badTiresTakenEmpty" class="empty-state">No bad tires have been taken for repair.</p>
         </section>
       </section>
       <section id="partsPage" class="parts-layout" data-shop-page-view="parts" hidden>
@@ -763,6 +788,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=266"></script>
+  <script src="app.js?v=271"></script>
 </body>
 </html>

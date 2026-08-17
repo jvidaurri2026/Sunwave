@@ -630,3 +630,14 @@ th { color: var(--muted); font-size: .82rem; }
   .available-days { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .repair-code-option-row { grid-template-columns: 1fr; }
 }
+.bad-tire-panel { border-left: 4px solid #7b1e3a; }
+.bad-tire-status { display: inline-block; padding: 4px 8px; border-radius: 4px; font-weight: 700; line-height: 1.25; }
+.bad-tire-status.waiting { color: #7a5700; background: #fff1cc; }
+.bad-tire-status.received { color: #216e39; background: #e2f1e7; }
+.bad-tire-repair-form { display: grid; grid-template-columns: minmax(130px, .8fr) minmax(170px, 1.2fr) 105px 140px auto; align-items: end; gap: 8px; min-width: 720px; }
+.bad-tire-repair-form input, .bad-tire-repair-form select { width: 100%; min-width: 0; }
+.bad-tire-repair-form button { white-space: nowrap; }
+@media (max-width: 900px) {
+  .bad-tire-repair-form { grid-template-columns: 1fr 1fr; min-width: 430px; }
+  .bad-tire-repair-form button { grid-column: 1 / -1; }
+}

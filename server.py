@@ -333,6 +333,26 @@ def init_db():
               PRIMARY KEY (repair_order_id, part_number)
             );
 
+            CREATE TABLE IF NOT EXISTS shop_bad_tires (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              repair_order_id INTEGER NOT NULL REFERENCES shop_repair_orders(id) ON DELETE CASCADE,
+              part_number TEXT NOT NULL COLLATE NOCASE,
+              description TEXT NOT NULL DEFAULT '',
+              asset_number TEXT NOT NULL COLLATE NOCASE,
+              quantity INTEGER NOT NULL CHECK(quantity > 0),
+              status TEXT NOT NULL DEFAULT 'Waiting to Be Taken for Repair'
+                CHECK(status IN ('Waiting to Be Taken for Repair', 'Taken for Repair')),
+              taken_for_repair_date TEXT NOT NULL DEFAULT '',
+              service_type TEXT NOT NULL DEFAULT '',
+              vendor TEXT NOT NULL DEFAULT '',
+              unit_price_cents INTEGER NOT NULL DEFAULT 0 CHECK(unit_price_cents >= 0),
+              part_order_id INTEGER REFERENCES shop_part_orders(id),
+              created_by TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_by TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS shop_service_schedules (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               scheduled_date TEXT NOT NULL,
@@ -662,6 +682,33 @@ def init_db():
             conn.execute("ALTER TABLE shop_repair_order_parts ADD COLUMN vendor TEXT NOT NULL DEFAULT 'Unspecified'")
         if "description" not in shop_order_part_columns:
             conn.execute("ALTER TABLE shop_repair_order_parts ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        bad_tire_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_bad_tires)").fetchall()}
+        if "service_type" not in bad_tire_columns:
+            conn.execute("ALTER TABLE shop_bad_tires ADD COLUMN service_type TEXT NOT NULL DEFAULT ''")
+        if "vendor" not in bad_tire_columns:
+            conn.execute("ALTER TABLE shop_bad_tires ADD COLUMN vendor TEXT NOT NULL DEFAULT ''")
+        if "unit_price_cents" not in bad_tire_columns:
+            conn.execute("ALTER TABLE shop_bad_tires ADD COLUMN unit_price_cents INTEGER NOT NULL DEFAULT 0")
+        if "part_order_id" not in bad_tire_columns:
+            conn.execute("ALTER TABLE shop_bad_tires ADD COLUMN part_order_id INTEGER REFERENCES shop_part_orders(id)")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_bad_tires_repair_part ON shop_bad_tires (repair_order_id, part_number COLLATE NOCASE)"
+        )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO shop_bad_tires (
+              repair_order_id, part_number, description, asset_number, quantity,
+              status, taken_for_repair_date, created_by, created_at, updated_by, updated_at
+            )
+            SELECT rop.repair_order_id, rop.part_number, rop.description, ro.asset_number, rop.quantity,
+                   'Waiting to Be Taken for Repair', '', ro.technician_username, ro.created_at,
+                   ro.technician_username, ro.created_at
+            FROM shop_repair_order_parts rop
+            JOIN shop_repair_orders ro ON ro.id = rop.repair_order_id
+            JOIN shop_parts p ON p.part_number = rop.part_number COLLATE NOCASE
+            WHERE p.is_tire = 1
+            """
+        )
         conn.execute(
             """
             INSERT OR IGNORE INTO shop_part_years (part_number, unit_year)
@@ -1278,7 +1325,7 @@ class Handler(SimpleHTTPRequestHandler):
             allowed_paths={
                 "/api/shop-parts", "/api/shop-part-lookup", "/api/shop-unit-types", "/api/shop-repair-codes",
                 "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-service-day-statuses",
-                "/api/shop-out-of-service", "/api/shop-part-orders"
+                "/api/shop-out-of-service", "/api/shop-part-orders", "/api/shop-whatsapp-settings", "/api/shop-bad-tires"
             }
         ):
             return
@@ -1328,6 +1375,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self.list_shop_out_of_service()
         if self.path == "/api/shop-part-orders":
             return self.list_shop_part_orders()
+        if self.path == "/api/shop-bad-tires":
+            return self.list_shop_bad_tires()
         if self.path == "/api/shop-whatsapp-settings":
             return self.get_shop_whatsapp_settings()
         return super().do_GET()
@@ -1344,7 +1393,7 @@ class Handler(SimpleHTTPRequestHandler):
             return
         if self.path not in ("/api/login", "/api/groupme/callback") and self.reject_technician_request(
             allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-repair-orders"},
-            allowed_prefixes=("/api/shop-service-schedules/",),
+            allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-bad-tires/"),
         ):
             return
         if self.path == "/api/login":
@@ -1384,6 +1433,9 @@ class Handler(SimpleHTTPRequestHandler):
         if self.path.startswith("/api/shop-part-orders/") and self.path.endswith("/received"):
             record_id = unquote(self.path.split("/api/shop-part-orders/", 1)[1].rsplit("/received", 1)[0])
             return self.receive_shop_part_order(record_id)
+        if self.path.startswith("/api/shop-bad-tires/") and self.path.endswith("/status"):
+            record_id = unquote(self.path.split("/api/shop-bad-tires/", 1)[1].rsplit("/status", 1)[0])
+            return self.update_shop_bad_tire_status(record_id)
         if self.path.startswith("/api/shop-out-of-service/") and self.path.endswith("/status"):
             record_id = unquote(self.path.split("/api/shop-out-of-service/", 1)[1].rsplit("/status", 1)[0])
             return self.update_shop_out_of_service_status(record_id)
@@ -1795,7 +1847,11 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json([quantity_asset_history_from_row(row) for row in rows])
 
     def get_shop_whatsapp_settings(self):
-        if self.require_admin() is None:
+        user = self.require_user()
+        if user is None:
+            return
+        if user["role"] not in ("Admin", "Technician"):
+            self.send_json({"error": "Only an admin or technician can read WhatsApp report settings."}, 403)
             return
         with connect() as conn:
             settings = whatsapp_settings_from_db(conn)
@@ -2593,7 +2649,7 @@ class Handler(SimpleHTTPRequestHandler):
             part_rows = []
             for part_number, part_quantity in requested_parts.items():
                 part = conn.execute(
-                    "SELECT part_number, description, vendor, price_cents, quantity, service_code FROM shop_parts WHERE part_number = ? COLLATE NOCASE",
+                    "SELECT part_number, description, vendor, price_cents, quantity, service_code, is_tire FROM shop_parts WHERE part_number = ? COLLATE NOCASE",
                     (part_number,),
                 ).fetchone()
                 if part is None:
@@ -2602,7 +2658,7 @@ class Handler(SimpleHTTPRequestHandler):
                     return self.send_json({"error": f"Part {part['part_number']} is not associated with a selected repair code."}, 400)
                 if part_quantity > int(part["quantity"]):
                     return self.send_json({"error": f"Only {int(part['quantity'])} of part {part['part_number']} are available."}, 400)
-                part_rows.append((part["part_number"], part["description"] or "", part["vendor"] or "Unspecified", part_quantity, int(part["price_cents"])))
+                part_rows.append((part["part_number"], part["description"] or "", part["vendor"] or "Unspecified", part_quantity, int(part["price_cents"]), bool(part["is_tire"])))
             order_status = "Working on it" if schedule is not None else "Completed"
             cursor = conn.execute(
                 """
@@ -2635,7 +2691,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "INSERT INTO shop_repair_order_code_options (repair_order_id, code, option_name, labor_minutes) VALUES (?, ?, ?, ?)",
                     [(order_id, row["code"], name, option_labor[name]) for name in requested_options[row["code"]]],
                 )
-            for part_number, description, vendor, part_quantity, unit_price_cents in part_rows:
+            for part_number, description, vendor, part_quantity, unit_price_cents, is_tire in part_rows:
                 conn.execute(
                     "UPDATE shop_parts SET quantity = quantity - ?, updated_by = ?, updated_at = ? WHERE part_number = ? COLLATE NOCASE",
                     (part_quantity, user["username"], iso_now(), part_number),
@@ -2644,6 +2700,17 @@ class Handler(SimpleHTTPRequestHandler):
                     "INSERT INTO shop_repair_order_parts (repair_order_id, part_number, description, vendor, quantity, unit_price_cents) VALUES (?, ?, ?, ?, ?, ?)",
                     (order_id, part_number, description, vendor, part_quantity, unit_price_cents),
                 )
+                if is_tire:
+                    now = iso_now()
+                    conn.execute(
+                        """
+                        INSERT INTO shop_bad_tires (
+                          repair_order_id, part_number, description, asset_number, quantity,
+                          status, taken_for_repair_date, created_by, created_at, updated_by, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, 'Waiting to Be Taken for Repair', '', ?, ?, ?, ?)
+                        """,
+                        (order_id, part_number, description, asset_number, part_quantity, user["username"], now, user["username"], now),
+                    )
             if schedule is not None:
                 conn.execute(
                     """
@@ -2656,6 +2723,115 @@ class Handler(SimpleHTTPRequestHandler):
                     (order_id, user["username"], technician_name, iso_now(), user["username"], iso_now(), schedule_id),
                 )
         self.send_json({"ok": True, "id": order_id, "scheduleId": schedule_id, "status": order_status})
+
+    def list_shop_bad_tires(self):
+        user = self.require_shop_viewer()
+        if user is None:
+            return
+        with connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT bt.*, ro.order_date, ro.technician_name, po.status AS part_order_status,
+                       po.pickup_date AS part_order_pickup_date
+                FROM shop_bad_tires bt
+                JOIN shop_repair_orders ro ON ro.id = bt.repair_order_id
+                LEFT JOIN shop_part_orders po ON po.id = bt.part_order_id
+                ORDER BY CASE bt.status WHEN 'Waiting to Be Taken for Repair' THEN 0 ELSE 1 END,
+                         bt.created_at DESC, bt.id DESC
+                """
+            ).fetchall()
+        self.send_json([
+            {
+                "id": int(row["id"]),
+                "repairOrderId": int(row["repair_order_id"]),
+                "repairOrderDate": row["order_date"],
+                "partNumber": row["part_number"],
+                "description": row["description"] or "",
+                "assetNumber": row["asset_number"],
+                "quantity": int(row["quantity"]),
+                "status": row["status"],
+                "takenForRepairDate": row["taken_for_repair_date"] or "",
+                "serviceType": row["service_type"] or "",
+                "vendor": row["vendor"] or "",
+                "unitPrice": f"{int(row['unit_price_cents'] or 0) / 100:.2f}",
+                "totalPrice": f"{int(row['unit_price_cents'] or 0) * int(row['quantity']) / 100:.2f}",
+                "partOrderId": int(row["part_order_id"]) if row["part_order_id"] is not None else None,
+                "partOrderStatus": row["part_order_status"] or "",
+                "receivedDate": row["part_order_pickup_date"] or "",
+                "mechanic": row["technician_name"] or "",
+                "createdBy": row["created_by"],
+                "createdAt": row["created_at"],
+                "updatedBy": row["updated_by"],
+                "updatedAt": row["updated_at"],
+            }
+            for row in rows
+        ])
+
+    def update_shop_bad_tire_status(self, record_id):
+        user = self.require_shop_technician()
+        if user is None:
+            return
+        try:
+            numeric_id = int(record_id)
+        except (TypeError, ValueError):
+            return self.send_json({"error": "Invalid bad-tire record."}, 400)
+        data = self.read_json()
+        status = str(data.get("status") or "").strip()
+        if status not in ("Waiting to Be Taken for Repair", "Taken for Repair"):
+            return self.send_json({"error": "Select a valid bad-tire status."}, 400)
+        taken_date = str(data.get("takenForRepairDate") or "").strip() if status == "Taken for Repair" else ""
+        service_type = str(data.get("serviceType") or "").strip() if status == "Taken for Repair" else ""
+        vendor = str(data.get("vendor") or "").strip() if status == "Taken for Repair" else ""
+        try:
+            unit_price = Decimal(str(data.get("unitPrice") or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            unit_price_cents = int(unit_price * 100) if status == "Taken for Repair" else 0
+        except (InvalidOperation, ValueError, TypeError):
+            return self.send_json({"error": "Enter a valid tire repair cost."}, 400)
+        if status == "Taken for Repair":
+            try:
+                datetime.strptime(taken_date, "%Y-%m-%d")
+            except ValueError:
+                return self.send_json({"error": "Enter the date the tires were taken for repair."}, 400)
+            if service_type not in ("Fix Flat", "Replace Tire"):
+                return self.send_json({"error": "Select Fix Flat or Replace Tire."}, 400)
+            if not vendor:
+                return self.send_json({"error": "Enter the tire repair shop or vendor."}, 400)
+            if unit_price_cents <= 0:
+                return self.send_json({"error": "Enter the repair or replacement cost for each tire."}, 400)
+        with connect() as conn:
+            record = conn.execute("SELECT * FROM shop_bad_tires WHERE id = ?", (numeric_id,)).fetchone()
+            if record is None:
+                return self.send_json({"error": "Bad-tire record was not found."}, 404)
+            part_order_id = record["part_order_id"]
+            if status == "Taken for Repair" and part_order_id is None:
+                now = iso_now()
+                cursor = conn.execute(
+                    """
+                    INSERT INTO shop_part_orders (
+                      part_number, description, vendor, quantity, purchase_type, asset_number,
+                      unit_price_cents, order_date, pickup_date, status,
+                      created_by, created_at, updated_by, updated_at
+                    ) VALUES (?, ?, ?, ?, 'Tire Inventory', ?, ?, ?, '', 'Waiting for Order', ?, ?, ?, ?)
+                    """,
+                    (
+                        record["part_number"], f"{service_type} - {record['description'] or record['part_number']}",
+                        vendor, int(record["quantity"]), record["asset_number"], unit_price_cents,
+                        taken_date, user["username"], now, user["username"], now,
+                    ),
+                )
+                part_order_id = cursor.lastrowid
+            cursor = conn.execute(
+                """
+                UPDATE shop_bad_tires
+                SET status = ?, taken_for_repair_date = ?, service_type = ?, vendor = ?,
+                    unit_price_cents = ?, part_order_id = ?, updated_by = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (status, taken_date, service_type, vendor, unit_price_cents, part_order_id, user["username"], iso_now(), numeric_id),
+            )
+            if cursor.rowcount == 0:
+                return self.send_json({"error": "Bad-tire record was not found."}, 404)
+        self.send_json({"ok": True, "id": numeric_id, "status": status, "takenForRepairDate": taken_date, "partOrderId": part_order_id})
 
     def shop_part_order_payload(self, row):
         return {
