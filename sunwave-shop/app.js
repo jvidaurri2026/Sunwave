@@ -53,6 +53,7 @@ const isShopAdmin = Boolean(session && session.user.role === "Admin");
 const isShopScheduler = Boolean(session && session.user.role === "Scheduler");
 const isShopTechnician = Boolean(session && session.user.role === "Technician");
 const isShopViewer = Boolean(session && session.user.role === "Shop Viewer");
+const canEditMechanicName = isShopAdmin || String(session?.user?.username || "").trim().toLowerCase() === "chicho";
 document.getElementById("shopWorkspace").hidden = !session;
 document.getElementById("shopDenied").hidden = Boolean(session);
 if (session) {
@@ -115,7 +116,7 @@ if (session) {
     document.getElementById(id).addEventListener(id === "ordersHistorySearch" ? "input" : "change", renderOrdersHistory);
   });
   document.getElementById("repairOrderTechnician").value = session.user.name;
-  document.getElementById("repairOrderTechnician").readOnly = !isShopAdmin;
+  document.getElementById("repairOrderTechnician").readOnly = !canEditMechanicName;
   document.getElementById("repairOrderDate").value = localDateValue();
   document.getElementById("serviceScheduleDate").value = localDateValue();
   document.getElementById("serviceAvailabilityDate").value = localDateValue();

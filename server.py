@@ -2547,7 +2547,8 @@ class Handler(SimpleHTTPRequestHandler):
         order_date = str(data.get("date") or "").strip()
         location = str(data.get("location") or "").strip()
         requested_technician_name = str(data.get("technicianName") or "").strip()
-        technician_name = requested_technician_name if user["role"] == "Admin" and requested_technician_name else user["name"]
+        can_edit_mechanic = user["role"] == "Admin" or str(user["username"] or "").strip().lower() == "chicho"
+        technician_name = requested_technician_name if can_edit_mechanic and requested_technician_name else user["name"]
         driver_name = str(data.get("driverName") or "").strip()
         asset_number = str(data.get("assetNumber") or "").strip()
         job_description = str(data.get("jobDescription") or "").strip()
