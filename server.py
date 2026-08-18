@@ -3189,7 +3189,7 @@ class Handler(SimpleHTTPRequestHandler):
                 (today, iso_now(), today),
             )
             schedules = conn.execute(
-                "SELECT * FROM shop_service_schedules ORDER BY scheduled_date DESC, scheduled_time, id DESC"
+                "SELECT * FROM shop_service_schedules WHERE status NOT IN ('Completed', 'Cancelled') ORDER BY scheduled_date, scheduled_time, id"
             ).fetchall()
             result = []
             for schedule in schedules:
