@@ -369,6 +369,78 @@ th { color: var(--muted); font-size: .82rem; }
 .table-action.danger-action { color: #9f1d35; border-color: #d7a8b1; }
 .parts-list .empty-state { margin-top: 14px; }
 
+/* Keep Out of Service controls and history inside the available page width. */
+#outOfServicePage { grid-template-columns: minmax(0, 1fr); }
+#outOfServiceForm {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+}
+#outOfServiceForm > h1,
+#outOfServiceForm > .form-message { grid-column: 1 / -1; }
+#outOfServiceForm .out-of-service-issue-field { grid-column: span 2; }
+#outOfServiceForm .conditional-fields { grid-column: span 2; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+#outOfServiceForm .form-actions { align-self: end; }
+#outOfServiceForm .toggle-setting input { width: 1px; min-height: 0; }
+#outOfServicePage .parts-list { width: 100%; overflow: hidden; }
+#outOfServicePage .table-wrap { width: 100%; overflow-x: hidden; }
+#outOfServicePage table { table-layout: fixed; }
+#outOfServicePage th,
+#outOfServicePage td {
+  padding: 8px 6px;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  vertical-align: top;
+  font-size: .78rem;
+}
+#outOfServicePage th:nth-child(1) { width: 7%; }
+#outOfServicePage th:nth-child(2) { width: 9%; }
+#outOfServicePage th:nth-child(3) { width: 12%; }
+#outOfServicePage th:nth-child(4) { width: 19%; }
+#outOfServicePage th:nth-child(5) { width: 14%; }
+#outOfServicePage th:nth-child(6) { width: 21%; }
+#outOfServicePage th:nth-child(7) { width: 9%; }
+#outOfServicePage th:nth-child(8) { width: 9%; }
+#outOfServicePage .table-field-stack { min-width: 0; }
+#outOfServicePage .table-status-select,
+#outOfServicePage .table-date-input,
+#outOfServicePage .table-action { width: 100%; min-width: 0; }
+
+@media (max-width: 900px) {
+  #outOfServiceForm { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #outOfServicePage table,
+  #outOfServicePage tbody,
+  #outOfServicePage tr,
+  #outOfServicePage td { display: block; width: 100%; }
+  #outOfServicePage thead { display: none; }
+  #outOfServicePage tbody { display: grid; gap: 12px; }
+  #outOfServicePage tr { overflow: hidden; border: 1px solid var(--line); border-radius: 6px; }
+  #outOfServicePage td {
+    display: grid;
+    grid-template-columns: minmax(105px, 32%) minmax(0, 1fr);
+    gap: 10px;
+    border-bottom: 1px solid rgba(0, 0, 0, .08);
+    padding: 9px 10px;
+    font-size: .86rem;
+  }
+  #outOfServicePage td:last-child { border-bottom: 0; }
+  #outOfServicePage td::before { color: var(--muted); font-size: .75rem; font-weight: 800; }
+  #outOfServicePage td:nth-child(1)::before { content: "Unit"; }
+  #outOfServicePage td:nth-child(2)::before { content: "Out date"; }
+  #outOfServicePage td:nth-child(3)::before { content: "ETA to fix"; }
+  #outOfServicePage td:nth-child(4)::before { content: "Issue"; }
+  #outOfServicePage td:nth-child(5)::before { content: "Status"; }
+  #outOfServicePage td:nth-child(6)::before { content: "Status details"; }
+  #outOfServicePage td:nth-child(7)::before { content: "Updated by"; }
+  #outOfServicePage td:nth-child(8)::before { content: "Action"; }
+}
+
+@media (max-width: 560px) {
+  #outOfServiceForm { grid-template-columns: 1fr; }
+  #outOfServiceForm .out-of-service-issue-field,
+  #outOfServiceForm .conditional-fields { grid-column: auto; }
+  #outOfServiceForm .conditional-fields { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 900px) {
   .dashboard-metrics { grid-template-columns: repeat(3, minmax(120px, 1fr)); }
   .dashboard-charts { grid-template-columns: 1fr; }

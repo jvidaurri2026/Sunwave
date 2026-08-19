@@ -1444,8 +1444,8 @@ class Handler(SimpleHTTPRequestHandler):
         ):
             return
         if self.path not in ("/api/login", "/api/groupme/callback") and self.reject_technician_request(
-            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-part-orders"},
-            allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-bad-tires/", "/api/shop-part-orders/"),
+            allowed_paths={"/api/logout", "/api/shop-parts", "/api/shop-unit-types", "/api/shop-repair-orders", "/api/shop-service-schedules", "/api/shop-out-of-service", "/api/shop-part-orders"},
+            allowed_prefixes=("/api/shop-service-schedules/", "/api/shop-out-of-service/", "/api/shop-bad-tires/", "/api/shop-part-orders/"),
         ):
             return
         if self.path == "/api/login":
