@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#7b1e3a">
   <title>Sunwave Shop</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=270">
+  <link rel="stylesheet" href="styles.css?v=274">
 </head>
 <body>
   <main class="shop-shell">
@@ -52,11 +52,10 @@
           <article><span>Open services</span><strong id="dashboardOpenServices">0</strong></article>
           <article><span>Scheduled</span><strong id="dashboardScheduled">0</strong></article>
           <article><span>Working on it</span><strong id="dashboardWorking">0</strong></article>
-          <article><span>Completed</span><strong id="dashboardCompleted">0</strong></article>
+          <article><span>Completed this month</span><strong id="dashboardCompleted">0</strong></article>
           <article><span>Cancelled</span><strong id="dashboardCancelled">0</strong></article>
           <article><span>Out of service</span><strong id="dashboardOutOfService">0</strong></article>
-          <article><span>Parts expense</span><strong id="dashboardPartsExpense">$0.00</strong></article>
-          <article><span>Other expenses</span><strong id="dashboardOtherExpense">$0.00</strong></article>
+          <article><span>Total expenses this month</span><strong id="dashboardPartsExpense">$0.00</strong></article>
         </section>
         <section class="dashboard-charts">
           <article class="shop-panel dashboard-chart">
@@ -65,8 +64,8 @@
           </article>
           <article class="shop-panel dashboard-chart">
             <div class="panel-heading expense-heading">
-              <div><h2>Parts Expenses</h2><span id="dashboardExpenseCaption">Last 6 months</span></div>
-              <div class="expense-tabs" role="tablist" aria-label="Parts expense view">
+              <div><h2>Expenses</h2><span id="dashboardExpenseCaption">Current year by month</span></div>
+              <div class="expense-tabs" role="tablist" aria-label="Expense view">
                 <button id="dashboardExpenseMonthTab" class="active" type="button" role="tab" aria-selected="true">By Month</button>
                 <button id="dashboardExpenseVendorTab" type="button" role="tab" aria-selected="false">By Vendor</button>
                 <button id="dashboardExpenseInventoryTab" type="button" role="tab" aria-selected="false">Current Inventory</button>
@@ -79,6 +78,12 @@
                 <span id="dashboardPartsDrilldownTotal"></span>
               </div>
               <div id="dashboardPartsDrilldownChart" class="parts-quantity-chart"></div>
+              <div class="table-wrap expense-order-table">
+                <table>
+                  <thead><tr><th>Date</th><th>Expense</th><th>Order</th><th>Vendor</th><th>Unit</th><th>Description</th><th>Amount</th></tr></thead>
+                  <tbody id="dashboardExpenseDrilldownOrders"></tbody>
+                </table>
+              </div>
             </section>
           </article>
         </section>
@@ -662,7 +667,7 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr><th>RO</th><th>Status</th><th>RO date</th><th>Original schedule</th><th>Current schedule</th><th>Working</th><th>Completed</th><th>Asset</th><th>Location</th><th>Mechanic</th><th>Driver</th><th>Mileage</th><th>Hours</th><th>Repair codes</th><th>Parts</th><th>Parts total</th><th>Repair cost</th><th>Total cost</th><th>Source</th><th>Job description</th></tr>
+                <tr><th>RO</th><th>Status</th><th>RO date</th><th>Original schedule</th><th>Current schedule</th><th>Working</th><th>Completed</th><th>Asset</th><th>Location</th><th>Cost vendor</th><th>Mechanic</th><th>Driver</th><th>Mileage</th><th>Hours</th><th>Repair codes</th><th>Parts</th><th>Parts total</th><th>Repair cost</th><th>Total cost</th><th>Source</th><th>Job description</th></tr>
               </thead>
               <tbody id="repairOrdersList"></tbody>
             </table>
@@ -680,11 +685,11 @@
           <article><span>Repair orders</span><strong id="unitHistoryOrderCount">0</strong></article>
           <article><span>Parts used</span><strong id="unitHistoryPartsQuantity">0</strong></article>
           <article><span>Parts expense</span><strong id="unitHistoryPartsExpense">$0.00</strong></article>
-          <article><span>Other repair cost</span><strong id="unitHistoryRepairCost">$0.00</strong></article>
+          <article><span>Repair cost</span><strong id="unitHistoryRepairCost">$0.00</strong></article>
         </section>
         <section class="shop-panel current-inventory-table">
           <div class="panel-heading"><h2>Saved Repair Orders</h2><span id="unitHistoryTotal">Select a unit</span></div>
-          <div class="table-wrap"><table><thead><tr><th>RO</th><th>Date</th><th>Status</th><th>Mechanic</th><th>Source</th><th>Repair codes</th><th>Parts</th><th>Parts quantity</th><th>Parts expense</th><th>Repair cost</th><th>Total cost</th><th>Description of job done</th><th>Print</th></tr></thead><tbody id="unitRepairHistoryList"></tbody></table></div>
+          <div class="table-wrap"><table><thead><tr><th>RO</th><th>Completed date</th><th>Status</th><th>Mechanic</th><th>Source</th><th>Cost vendor</th><th>Service / job description</th><th>Repair codes</th><th>Parts</th><th>Parts quantity</th><th>Parts expense</th><th>Repair cost</th><th>Total cost</th><th>Print</th></tr></thead><tbody id="unitRepairHistoryList"></tbody></table></div>
           <p id="unitRepairHistoryEmpty" class="empty-state">Select a unit to view its repair history.</p>
         </section>
       </section>
@@ -788,6 +793,6 @@
     </section>
   </main>
   <script src="../jsQR.js"></script>
-  <script src="app.js?v=280"></script>
+  <script src="app.js?v=289"></script>
 </body>
 </html>

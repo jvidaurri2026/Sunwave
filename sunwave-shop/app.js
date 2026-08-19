@@ -13,6 +13,8 @@ let editingRepairCode = "";
 let editingUnitId = null;
 let dashboardExpenseMode = "month";
 let dashboardSelectedMonth = "";
+let dashboardSelectedVendor = "";
+let dashboardSelectedVendorMonth = "";
 let activeScheduleRepairId = null;
 let smartPartScanStream = null;
 let smartPartScanFrame = 0;
@@ -38,6 +40,12 @@ function populateFuelTypeOptions() {
 }
 
 populateFuelTypeOptions();
+
+function removeLegacyOtherExpenseMetric() {
+  document.getElementById("dashboardOtherExpense")?.closest("article")?.remove();
+}
+
+removeLegacyOtherExpenseMetric();
 
 function readShopSession() {
   try {
@@ -301,7 +309,7 @@ function renderShopPartOrders() {
       : isShopAdmin || isShopTechnician
       ? `<div class="receive-part-action"><input class="receive-part-date" type="date" value="${localDateValue()}" aria-label="Pickup date"><button class="table-action" type="button">Order Received</button></div>`
       : "Read only";
-    const typeLabel = tireRepair ? "Tire Repair" : item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
+    const typeLabel = tireRepair ? "Tire Repair" : item.purchaseType === "Job Material" ? "Job Material" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
     row.innerHTML = `<td>${escapeHtml(typeLabel)}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td><strong>${escapeHtml(itemName)}</strong></td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.createdBy)}</td><td>${receiveAction}</td>`;
     row.querySelector("button")?.addEventListener("click", () => receiveDashboardPartOrder(item, row));
     waitingBody.append(row);
@@ -309,7 +317,7 @@ function renderShopPartOrders() {
   received.forEach((item) => {
     const row = document.createElement("tr");
     const itemName = item.purchaseType === "Job Material" ? item.description : `${item.partNumber} - ${item.description}`;
-    const typeLabel = linkedTireOrderIds.has(Number(item.id)) ? "Tire Repair" : item.purchaseType === "Job Material" ? "Other Expense" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
+    const typeLabel = linkedTireOrderIds.has(Number(item.id)) ? "Tire Repair" : item.purchaseType === "Job Material" ? "Job Material" : item.purchaseType === "Tire Inventory" ? "Tire Inventory" : "Unit Part";
     row.innerHTML = `<td><strong>${escapeHtml(item.pickupDate)}</strong></td><td>${escapeHtml(typeLabel)}</td><td>${escapeHtml(item.assetNumber || "Not applicable")}</td><td>${escapeHtml(itemName)}</td><td>${escapeHtml(item.vendor || "Unspecified")}</td><td>${item.quantity}</td><td>$${escapeHtml(item.totalPrice)}</td><td>${escapeHtml(item.orderDate)}</td><td>${escapeHtml(item.updatedBy)}</td>`;
     receivedBody.append(row);
   });
@@ -612,8 +620,16 @@ async function lookupSmartPart(event) {
   try {
     const result = await shopApi(`/api/shop-part-lookup?q=${encodeURIComponent(query)}`);
     renderSmartPartMatches(result.results || [], query);
-    if (!existing) message.textContent = result.results.length ? "Select the best online match, then verify compatibility before registering." : "No online match was found. Complete the part information manually.";
-    document.getElementById("smartPartLookupState").textContent = result.results.length ? `${result.results.length} matches` : "No match";
+    if (!existing) {
+      message.textContent = result.results.length
+        ? `Select the best ${result.cached ? "saved " : ""}online match, then verify compatibility before registering.`
+        : result.limited || result.unavailable
+          ? "Online lookup is temporarily unavailable. Complete the part information manually; scanning and saving still work."
+          : "No online match was found. Complete the part information manually.";
+    }
+    document.getElementById("smartPartLookupState").textContent = result.results.length
+      ? `${result.results.length} ${result.cached ? "cached " : ""}matches`
+      : result.limited || result.unavailable ? "Manual entry" : "No match";
   } catch (error) {
     if (!existing) message.textContent = `${error.message} You can still complete the form manually.`;
     document.getElementById("smartPartLookupState").textContent = existing ? "Inventory match" : "Manual entry";
@@ -1270,6 +1286,10 @@ function setShopPage(page) {
 function setDashboardExpenseMode(mode) {
   dashboardExpenseMode = ["month", "vendor", "inventory"].includes(mode) ? mode : "month";
   if (dashboardExpenseMode !== "month") dashboardSelectedMonth = "";
+  if (dashboardExpenseMode !== "vendor") {
+    dashboardSelectedVendor = "";
+    dashboardSelectedVendorMonth = "";
+  }
   const monthTab = document.getElementById("dashboardExpenseMonthTab");
   const vendorTab = document.getElementById("dashboardExpenseVendorTab");
   const inventoryTab = document.getElementById("dashboardExpenseInventoryTab");
@@ -1282,33 +1302,122 @@ function setDashboardExpenseMode(mode) {
   renderShopDashboard();
 }
 
-function renderMonthPartsDrilldown(month) {
+function renderMonthPartsDrilldown(month, selectedVendor = "") {
   const panel = document.getElementById("dashboardPartsDrilldown");
   const chart = document.getElementById("dashboardPartsDrilldownChart");
-  if (!month || dashboardExpenseMode !== "month") {
+  const orderList = document.getElementById("dashboardExpenseDrilldownOrders");
+  if (!month || !["month", "vendor"].includes(dashboardExpenseMode)) {
     panel.hidden = true;
     return;
   }
+  const matchesVendor = (vendor) => !selectedVendor || String(vendor || "Unspecified") === selectedVendor;
   const partTotals = new Map();
+  const expenseRows = [];
   repairOrders.forEach((order) => {
-    if (String(order.date || "").slice(0, 7) !== month.key) return;
+    const expenseDate = order.completedDate || order.date;
+    if (String(expenseDate || "").slice(0, 7) !== month.key) return;
+    const fleetioWorkOrder = String(order.jobDescription || "").match(/Fleetio Work Order #([^\n]+)/i)?.[1]?.trim();
+    const orderLabel = order.source === "Fleetio"
+      ? `RO ${order.id} / Fleetio WO ${fleetioWorkOrder || order.sourceReferenceId || "Unknown"}`
+      : `RO ${order.id}`;
+    const repairCost = Number(order.repairCost || 0);
+    const repairVendor = order.vendor || order.location || "Unspecified";
+    if (repairCost > 0 && matchesVendor(repairVendor)) {
+      expenseRows.push({
+        date: expenseDate,
+        type: "Repair cost",
+        orderLabel,
+        vendor: repairVendor,
+        unit: order.assetNumber || "Not applicable",
+        description: order.jobDescription || "Repair service",
+        amount: repairCost,
+        fleetio: order.source === "Fleetio"
+      });
+    }
+    let listedPartsTotal = 0;
     (order.partsUsed || []).forEach((part) => {
+      const partVendor = part.vendor || "Unspecified";
+      if (!matchesVendor(partVendor)) return;
       const partNumber = String(part.partNumber || "Unknown");
       partTotals.set(partNumber, (partTotals.get(partNumber) || 0) + Number(part.quantity || 0));
+      const amount = Number(part.totalPrice || 0) || Number(part.unitPrice || 0) * Number(part.quantity || 0);
+      listedPartsTotal += amount;
+      if (amount > 0) {
+        expenseRows.push({
+          date: expenseDate,
+          type: "Repair part",
+          orderLabel,
+          vendor: partVendor,
+          unit: order.assetNumber || "Not applicable",
+          description: `${part.partNumber || "Part"} - ${part.description || "No description"} (Qty ${Number(part.quantity || 0)})`,
+          amount,
+          fleetio: order.source === "Fleetio"
+        });
+      }
     });
+    const unlistedPartsTotal = selectedVendor ? 0 : Math.max(0, Number(order.partsTotal || 0) - listedPartsTotal);
+    if (unlistedPartsTotal > 0.005) {
+      expenseRows.push({
+        date: expenseDate,
+        type: "Repair parts",
+        orderLabel,
+        vendor: "Unspecified",
+        unit: order.assetNumber || "Not applicable",
+        description: "Parts total saved on repair order",
+        amount: unlistedPartsTotal,
+        fleetio: order.source === "Fleetio"
+      });
+    }
   });
+  shopPartOrders
+    .filter((item) => item.status === "Order Received" && String(item.pickupDate || "").slice(0, 7) === month.key)
+    .forEach((item) => {
+      const amount = Number(item.totalPrice || 0);
+      const purchaseVendor = item.vendor || "Unspecified";
+      if (amount <= 0 || !matchesVendor(purchaseVendor)) return;
+      const type = item.purchaseType === "Job Material"
+        ? "Job material"
+        : item.purchaseType === "Tire Inventory" ? "Tire inventory" : "Part purchase";
+      expenseRows.push({
+        date: item.pickupDate,
+        type,
+        orderLabel: `Purchase ${item.id}`,
+        vendor: purchaseVendor,
+        unit: item.assetNumber || "Not applicable",
+        description: item.purchaseType === "Job Material"
+          ? item.description || "Job material"
+          : `${item.partNumber || "Part"} - ${item.description || "No description"} (Qty ${Number(item.quantity || 0)})`,
+        amount,
+        fleetio: false
+      });
+    });
+  expenseRows.sort((a, b) => a.date.localeCompare(b.date) || a.orderLabel.localeCompare(b.orderLabel));
   const parts = [...partTotals.entries()].filter(([, quantity]) => quantity > 0).sort((a, b) => b[1] - a[1]);
   const maxQuantity = Math.max(1, ...parts.map(([, quantity]) => quantity));
   const totalQuantity = parts.reduce((sum, [, quantity]) => sum + quantity, 0);
-  document.getElementById("dashboardPartsDrilldownTitle").textContent = `Parts used in ${month.fullLabel}`;
-  document.getElementById("dashboardPartsDrilldownTotal").textContent = `${totalQuantity} total part${totalQuantity === 1 ? "" : "s"}`;
+  const detailTotal = expenseRows.reduce((sum, item) => sum + item.amount, 0);
+  document.getElementById("dashboardPartsDrilldownTitle").textContent = selectedVendor
+    ? `${selectedVendor} expenses for ${month.fullLabel}`
+    : `Expense details for ${month.fullLabel}`;
+  document.getElementById("dashboardPartsDrilldownTotal").textContent = `${expenseRows.length} cost record${expenseRows.length === 1 ? "" : "s"} - $${detailTotal.toFixed(2)}`;
   chart.innerHTML = parts.length ? parts.map(([partNumber, quantity]) => `
     <div class="parts-quantity-row" title="${escapeHtml(partNumber)}: ${quantity}">
       <span>${escapeHtml(partNumber)}</span>
       <div class="chart-track"><div class="parts-quantity-bar" style="width:${(quantity / maxQuantity) * 100}%"></div></div>
       <strong>${quantity}</strong>
     </div>
-  `).join("") : `<p class="expense-empty">No parts were recorded for this month.</p>`;
+  `).join("") : `<p class="expense-empty">No repair parts were recorded for this month.</p>`;
+  orderList.innerHTML = expenseRows.length ? expenseRows.map((item) => `
+    <tr class="${item.fleetio ? "schedule-row source-fleetio" : ""}">
+      <td>${escapeHtml(item.date)}</td>
+      <td>${escapeHtml(item.type)}</td>
+      <td><strong>${escapeHtml(item.orderLabel)}</strong></td>
+      <td>${escapeHtml(item.vendor)}</td>
+      <td>${escapeHtml(item.unit)}</td>
+      <td class="table-cell-lines">${escapeHtml(item.description)}</td>
+      <td><strong>$${item.amount.toFixed(2)}</strong></td>
+    </tr>
+  `).join("") : `<tr><td colspan="7">No expenses were recorded for this month.</td></tr>`;
   panel.hidden = false;
 }
 
@@ -1325,15 +1434,26 @@ function isRepairOrderForDate(order, date) {
 
 function renderShopDashboard() {
   if (!isShopAdmin && !isShopViewer && !isShopTechnician) return;
+  removeLegacyOtherExpenseMetric();
+  const currentMonthKey = localDateValue().slice(0, 7);
   const scheduled = serviceSchedules.filter((item) => item.status === "Scheduled").length;
   const working = serviceSchedules.filter((item) => item.status === "Working on it").length;
-  const completed = repairOrders.filter((item) => (item.status || "Completed") === "Completed").length;
+  const completedOrdersThisMonth = repairOrders.filter((item) => {
+    const completionDate = item.completedDate || item.date;
+    return (item.status || "Completed") === "Completed" && String(completionDate || "").slice(0, 7) === currentMonthKey;
+  });
+  const completed = completedOrdersThisMonth.length;
   const cancelled = repairOrders.filter((item) => item.status === "Cancelled").length;
   const activeOutOfService = outOfServiceReports.filter((report) => report.status !== "Fixed");
   const receivedPurchases = shopPartOrders.filter((item) => item.status === "Order Received");
-  const unitPurchaseExpense = receivedPurchases.filter((item) => item.purchaseType === "Unit Part" || item.purchaseType === "Tire Inventory").reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
-  const otherExpense = receivedPurchases.filter((item) => item.purchaseType === "Job Material").reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
-  const partsExpense = repairOrders.reduce((sum, item) => sum + Number(item.partsTotal || 0), 0) + unitPurchaseExpense;
+  const repairExpenseThisMonth = completedOrdersThisMonth.reduce(
+    (sum, item) => sum + Number(item.partsTotal || 0) + Number(item.repairCost || 0),
+    0
+  );
+  const purchaseExpenseThisMonth = receivedPurchases
+    .filter((item) => String(item.pickupDate || "").slice(0, 7) === currentMonthKey)
+    .reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
+  const totalExpenseThisMonth = repairExpenseThisMonth + purchaseExpenseThisMonth;
   const statusCounts = [
     ["Scheduled", scheduled, "scheduled"],
     ["Working", working, "working"],
@@ -1349,8 +1469,7 @@ function renderShopDashboard() {
   document.getElementById("dashboardCompleted").textContent = completed;
   document.getElementById("dashboardCancelled").textContent = cancelled;
   document.getElementById("dashboardOutOfService").textContent = activeOutOfService.length;
-  document.getElementById("dashboardPartsExpense").textContent = `$${partsExpense.toFixed(2)}`;
-  document.getElementById("dashboardOtherExpense").textContent = `$${otherExpense.toFixed(2)}`;
+  document.getElementById("dashboardPartsExpense").textContent = `$${totalExpenseThisMonth.toFixed(2)}`;
   document.getElementById("dashboardServiceTotal").textContent = `${statusTotal} service${statusTotal === 1 ? "" : "s"}`;
   document.getElementById("dashboardUpdatedAt").textContent = `Updated ${new Date().toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
   document.getElementById("dashboardStatusChart").innerHTML = statusCounts.map(([label, count, className]) => `
@@ -1363,8 +1482,8 @@ function renderShopDashboard() {
 
   const today = new Date();
   const months = [];
-  for (let offset = 5; offset >= 0; offset -= 1) {
-    const date = new Date(today.getFullYear(), today.getMonth() - offset, 1);
+  for (let monthIndex = 0; monthIndex <= today.getMonth(); monthIndex += 1) {
+    const date = new Date(today.getFullYear(), monthIndex, 1);
     months.push({
       key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
       label: date.toLocaleDateString([], { month: "short" }),
@@ -1373,8 +1492,9 @@ function renderShopDashboard() {
     });
   }
   repairOrders.forEach((order) => {
-    const month = months.find((item) => item.key === String(order.date || "").slice(0, 7));
-    if (month) month.total += Number(order.partsTotal || 0);
+    const expenseDate = order.completedDate || order.date;
+    const month = months.find((item) => item.key === String(expenseDate || "").slice(0, 7));
+    if (month) month.total += Number(order.partsTotal || 0) + Number(order.repairCost || 0);
   });
   receivedPurchases.forEach((purchase) => {
     const month = months.find((item) => item.key === String(purchase.pickupDate || "").slice(0, 7));
@@ -1420,7 +1540,8 @@ function renderShopDashboard() {
   } else if (dashboardExpenseMode === "vendor") {
     const vendorMonths = new Map();
     repairOrders.forEach((order) => {
-      const monthKey = String(order.date || "").slice(0, 7);
+      const expenseDate = order.completedDate || order.date;
+      const monthKey = String(expenseDate || "").slice(0, 7);
       if (!months.some((month) => month.key === monthKey)) return;
       (order.partsUsed || []).forEach((part) => {
         const vendor = part.vendor || "Unspecified";
@@ -1428,6 +1549,12 @@ function renderShopDashboard() {
         const key = `${monthKey}\u0000${vendor}`;
         vendorMonths.set(key, (vendorMonths.get(key) || 0) + expense);
       });
+      const repairCost = Number(order.repairCost || 0);
+      if (repairCost > 0) {
+        const repairVendor = order.vendor || order.location || order.source || "Repair Service";
+        const key = `${monthKey}\u0000${repairVendor}`;
+        vendorMonths.set(key, (vendorMonths.get(key) || 0) + repairCost);
+      }
     });
     receivedPurchases.forEach((purchase) => {
       const monthKey = String(purchase.pickupDate || "").slice(0, 7);
@@ -1450,21 +1577,32 @@ function renderShopDashboard() {
       <section class="vendor-month-group">
         <h3>${month.label}</h3>
         ${month.vendors.length ? `<div class="vendor-expense-columns">${month.vendors.map(([vendor, total]) => `
-          <div class="vendor-expense-column" title="${escapeHtml(vendor)}: $${total.toFixed(2)}">
+          <button class="vendor-expense-column${dashboardSelectedVendorMonth === month.key && dashboardSelectedVendor === vendor ? " selected" : ""}" type="button" data-expense-vendor-month="${month.key}" data-expense-vendor="${escapeHtml(vendor)}" title="Show ${escapeHtml(vendor)} orders for ${month.fullLabel}">
             <strong>$${total.toFixed(2)}</strong>
             <div class="vendor-expense-track"><div class="vendor-expense-bar" style="height:${(total / vendorMax) * 100}%"></div></div>
             <span>${escapeHtml(vendor)}</span>
-          </div>
+          </button>
         `).join("")}</div>` : `<span class="vendor-month-empty">No expense</span>`}
       </section>
     `).join("") : `<p class="expense-empty">No vendor expenses recorded.</p>`;
-    document.getElementById("dashboardExpenseCaption").textContent = `Last 6 months - ${vendorCount} vendor${vendorCount === 1 ? "" : "s"}`;
-    renderMonthPartsDrilldown(null);
+    expenseChart.querySelectorAll("[data-expense-vendor]").forEach((button) => {
+      button.addEventListener("click", () => {
+        dashboardSelectedVendorMonth = button.dataset.expenseVendorMonth;
+        dashboardSelectedVendor = button.dataset.expenseVendor;
+        renderShopDashboard();
+        requestAnimationFrame(() => document.getElementById("dashboardPartsDrilldown")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      });
+    });
+    document.getElementById("dashboardExpenseCaption").textContent = `${today.getFullYear()} by month - ${vendorCount} vendor${vendorCount === 1 ? "" : "s"}`;
+    renderMonthPartsDrilldown(
+      months.find((month) => month.key === dashboardSelectedVendorMonth),
+      dashboardSelectedVendor
+    );
   } else {
     const expenseMax = Math.max(1, ...months.map((month) => month.total));
     expenseChart.className = "expense-chart";
     expenseChart.innerHTML = months.map((month) => `
-      <button class="expense-column${dashboardSelectedMonth === month.key ? " selected" : ""}" type="button" data-expense-month="${month.key}" aria-label="Show parts used in ${month.fullLabel}">
+      <button class="expense-column${dashboardSelectedMonth === month.key ? " selected" : ""}" type="button" data-expense-month="${month.key}" aria-label="Show expense details for ${month.fullLabel}">
         <strong>$${month.total.toFixed(0)}</strong>
         <div class="expense-bar-space"><div class="expense-bar" style="height:${Math.max(2, (month.total / expenseMax) * 100)}%"></div></div>
         <span>${month.label}</span>
@@ -1476,7 +1614,7 @@ function renderShopDashboard() {
         renderShopDashboard();
       });
     });
-    document.getElementById("dashboardExpenseCaption").textContent = "Last 6 months";
+    document.getElementById("dashboardExpenseCaption").textContent = `${today.getFullYear()} monthly totals`;
     renderMonthPartsDrilldown(months.find((month) => month.key === dashboardSelectedMonth));
   }
 
@@ -1947,7 +2085,8 @@ function renderRepairOrders() {
   list.replaceChildren();
   orders.forEach((order) => {
     const item = document.createElement("tr");
-    item.className = `schedule-row status-${(order.status || "Completed").toLowerCase().replaceAll(" ", "-")}`;
+    const sourceClass = (order.source || "").toLowerCase() === "fleetio" ? " source-fleetio" : "";
+    item.className = `schedule-row status-${(order.status || "Completed").toLowerCase().replaceAll(" ", "-")}${sourceClass}`;
     const codes = (order.repairCodes || []).map((code) => {
       const positions = (code.positions || []).length ? ` - ${code.positions.join(", ")}` : "";
       const options = (code.options || []).length
@@ -1971,6 +2110,7 @@ function renderRepairOrders() {
       <td>${escapeHtml(order.completedDate || "Not completed")}</td>
       <td><strong>${escapeHtml(order.assetNumber)}</strong></td>
       <td>${escapeHtml(order.location)}</td>
+      <td>${escapeHtml(order.vendor || "Sunwave Shop")}</td>
       <td>${escapeHtml(order.technicianName)}</td>
       <td>${escapeHtml(order.driverName || "Not set")}</td>
       <td>${escapeHtml(order.assetMileage)}</td>
@@ -2022,7 +2162,7 @@ function printRepairOrderInvoice(orderId) {
   }
   invoice.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Repair Order ${Number(order.id)}</title><style>
     *{box-sizing:border-box}body{margin:0;background:#fff;color:#202124;font:14px Arial,sans-serif}.invoice{max-width:900px;margin:0 auto;padding:32px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:4px solid #7a1731;padding-bottom:18px}.brand h1{margin:0;color:#7a1731;font-size:28px}.brand p,.invoice-title p{margin:5px 0 0;color:#5f6368}.invoice-title{text-align:right}.invoice-title h2{margin:0;font-size:24px}.status{display:inline-block;margin-top:8px;padding:5px 10px;border:1px solid #7a1731;color:#7a1731;font-weight:700}.details{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:22px 0}.detail{border:1px solid #d8dadd;padding:10px;min-height:58px}.detail span{display:block;color:#666;font-size:11px;text-transform:uppercase;margin-bottom:5px}.section{margin-top:22px}.section h3{margin:0 0 8px;color:#7a1731;font-size:15px;text-transform:uppercase}table{width:100%;border-collapse:collapse}th,td{border:1px solid #d8dadd;padding:8px;text-align:left;vertical-align:top}th{background:#f2f3f4;font-size:12px}.money{text-align:right}.job{border:1px solid #d8dadd;padding:12px;white-space:pre-wrap;min-height:72px}.totals{width:330px;margin:20px 0 0 auto}.totals div{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #ddd}.totals .grand{font-size:17px;font-weight:700;color:#7a1731}.signatures{display:grid;grid-template-columns:1fr 1fr;gap:60px;margin-top:54px}.signature{border-top:1px solid #333;padding-top:6px;color:#666}.actions{display:flex;justify-content:flex-end;margin-bottom:16px}.actions button{background:#7a1731;color:white;border:0;padding:10px 16px;font-weight:700;cursor:pointer}@media print{.actions{display:none}.invoice{max-width:none;padding:0}@page{margin:0.45in}}
-  </style></head><body><main class="invoice"><div class="actions"><button onclick="window.print()">Print / Save PDF</button></div><header class="header"><div class="brand"><h1>Sunwave Shop</h1><p>Maintenance and Repair Services</p></div><div class="invoice-title"><h2>Repair Order Invoice</h2><p>RO #${Number(order.id)}</p><span class="status">${escapeHtml(order.status || "Completed")}</span></div></header><section class="details"><div class="detail"><span>Unit number</span><strong>${escapeHtml(order.assetNumber)}</strong></div><div class="detail"><span>Unit type</span><strong>${escapeHtml(unit.unitType || "Not recorded")}</strong></div><div class="detail"><span>Date</span><strong>${escapeHtml(order.date)}</strong></div><div class="detail"><span>Make / Model</span><strong>${escapeHtml([unit.make, unit.model].filter(Boolean).join(" ") || "Not recorded")}</strong></div><div class="detail"><span>Location</span><strong>${escapeHtml(order.location || "Not recorded")}</strong></div><div class="detail"><span>Mechanic</span><strong>${escapeHtml(order.technicianName || "Not recorded")}</strong></div><div class="detail"><span>Driver</span><strong>${escapeHtml(order.driverName || "Not recorded")}</strong></div><div class="detail"><span>Mileage</span><strong>${escapeHtml(order.assetMileage || "Not recorded")}</strong></div><div class="detail"><span>Hours</span><strong>${escapeHtml(order.assetHours || "Not recorded")}</strong></div></section><section class="section"><h3>Description of job done</h3><div class="job">${escapeHtml(order.jobDescription || "No description recorded")}</div></section><section class="section"><h3>Repair codes</h3><table><thead><tr><th>Code</th><th>Description / position</th>${isShopAdmin ? "<th>Labor hours</th>" : ""}</tr></thead><tbody>${codes}</tbody></table></section><section class="section"><h3>Parts used</h3><table><thead><tr><th>Part number</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>${parts}</tbody></table></section><div class="totals"><div><span>Parts total</span><strong>$${escapeHtml(order.partsTotal || "0.00")}</strong></div><div><span>Other repair cost</span><strong>$${escapeHtml(order.repairCost || "0.00")}</strong></div><div class="grand"><span>Total</span><strong>$${escapeHtml(order.totalCost || order.partsTotal || "0.00")}</strong></div></div><div class="signatures"><div class="signature">Mechanic signature</div><div class="signature">Authorized signature</div></div></main></body></html>`);
+  </style></head><body><main class="invoice"><div class="actions"><button onclick="window.print()">Print / Save PDF</button></div><header class="header"><div class="brand"><h1>Sunwave Shop</h1><p>Maintenance and Repair Services</p></div><div class="invoice-title"><h2>Repair Order Invoice</h2><p>RO #${Number(order.id)}</p><span class="status">${escapeHtml(order.status || "Completed")}</span></div></header><section class="details"><div class="detail"><span>Unit number</span><strong>${escapeHtml(order.assetNumber)}</strong></div><div class="detail"><span>Unit type</span><strong>${escapeHtml(unit.unitType || "Not recorded")}</strong></div><div class="detail"><span>Date</span><strong>${escapeHtml(order.date)}</strong></div><div class="detail"><span>Make / Model</span><strong>${escapeHtml([unit.make, unit.model].filter(Boolean).join(" ") || "Not recorded")}</strong></div><div class="detail"><span>Location</span><strong>${escapeHtml(order.location || "Not recorded")}</strong></div><div class="detail"><span>Cost vendor</span><strong>${escapeHtml(order.vendor || "Sunwave Shop")}</strong></div><div class="detail"><span>Mechanic</span><strong>${escapeHtml(order.technicianName || "Not recorded")}</strong></div><div class="detail"><span>Driver</span><strong>${escapeHtml(order.driverName || "Not recorded")}</strong></div><div class="detail"><span>Mileage / Hours</span><strong>${escapeHtml(order.assetMileage || "Not recorded")} / ${escapeHtml(order.assetHours || "Not recorded")}</strong></div></section><section class="section"><h3>Description of job done</h3><div class="job">${escapeHtml(order.jobDescription || "No description recorded")}</div></section><section class="section"><h3>Repair codes</h3><table><thead><tr><th>Code</th><th>Description / position</th>${isShopAdmin ? "<th>Labor hours</th>" : ""}</tr></thead><tbody>${codes}</tbody></table></section><section class="section"><h3>Parts used</h3><table><thead><tr><th>Part number</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Total</th></tr></thead><tbody>${parts}</tbody></table></section><div class="totals"><div><span>Parts total</span><strong>$${escapeHtml(order.partsTotal || "0.00")}</strong></div><div><span>${escapeHtml(order.vendor || "Repair")} cost</span><strong>$${escapeHtml(order.repairCost || "0.00")}</strong></div><div class="grand"><span>Total</span><strong>$${escapeHtml(order.totalCost || order.partsTotal || "0.00")}</strong></div></div><div class="signatures"><div class="signature">Mechanic signature</div><div class="signature">Authorized signature</div></div></main></body></html>`);
   invoice.document.close();
   invoice.focus();
 }
@@ -2051,20 +2191,22 @@ function renderUnitRepairHistory() {
     const parts = (order.partsUsed || []).map((part) => `${part.partNumber} - ${part.description || "No description"}\nQty ${part.quantity}`).join("\n\n") || "None";
     const quantity = (order.partsUsed || []).reduce((sum, part) => sum + Number(part.quantity || 0), 0);
     const row = document.createElement("tr");
-    row.className = `schedule-row status-${String(order.status || "Completed").toLowerCase().replaceAll(" ", "-")}`;
+    const sourceClass = String(order.source || "").toLowerCase() === "fleetio" ? " source-fleetio" : "";
+    row.className = `schedule-row status-${String(order.status || "Completed").toLowerCase().replaceAll(" ", "-")}${sourceClass}`;
     row.innerHTML = `
       <td><strong>#${Number(order.id)}</strong></td>
-      <td>${escapeHtml(order.date)}</td>
+      <td>${escapeHtml(order.completedDate || order.date)}</td>
       <td>${escapeHtml(order.status || "Completed")}</td>
       <td>${escapeHtml(order.technicianName)}</td>
       <td>${escapeHtml(order.source || "Repair Order")}</td>
+      <td>${escapeHtml(order.vendor || "Sunwave Shop")}</td>
+      <td class="table-cell-lines unit-history-description"><strong>${escapeHtml(String(order.source || "").toLowerCase() === "fleetio" ? "Fleetio service" : "Work performed")}</strong>\n${escapeHtml(order.jobDescription || "No description recorded")}</td>
       <td class="table-cell-lines">${escapeHtml(codes)}</td>
       <td class="table-cell-lines">${escapeHtml(parts)}</td>
       <td>${quantity}</td>
       <td>$${escapeHtml(order.partsTotal || "0.00")}</td>
       <td>$${escapeHtml(order.repairCost || "0.00")}</td>
       <td>$${escapeHtml(order.totalCost || order.partsTotal || "0.00")}</td>
-      <td class="table-cell-lines">${escapeHtml(order.jobDescription || "No description recorded")}</td>
       <td><button class="print-order-button" type="button" aria-label="Print repair order ${Number(order.id)}">Print</button></td>
     `;
     row.querySelector(".print-order-button").addEventListener("click", () => printRepairOrderInvoice(order.id));
@@ -2173,7 +2315,7 @@ function buildDashboardWhatsappReport() {
         : `${item.partNumber} - ${item.description}`;
       lines.push("", `${name} - Qty ${item.quantity}`);
       lines.push(`Vendor: ${item.vendor || "Unspecified"}`);
-      lines.push(item.purchaseType === "Job Material" ? "Expense: Other Expenses" : item.purchaseType === "Tire Inventory" ? "Expense: Tire Inventory" : unitLabel(item.assetNumber));
+      lines.push(item.purchaseType === "Job Material" ? "Expense: Job Material" : item.purchaseType === "Tire Inventory" ? "Expense: Tire Inventory" : unitLabel(item.assetNumber));
       lines.push(`Status: ${item.status === "Order Received" ? "Order Picked Up" : item.status}`);
     });
   } else {
@@ -2188,7 +2330,7 @@ function buildDashboardWhatsappReport() {
         : `${item.partNumber} - ${item.description}`;
       lines.push("", `${name} - Qty ${item.quantity}`);
       lines.push(`Vendor: ${item.vendor || "Unspecified"}`);
-      lines.push(item.purchaseType === "Job Material" ? "Expense: Other Expenses" : item.purchaseType === "Tire Inventory" ? "Expense: Tire Inventory" : unitLabel(item.assetNumber));
+      lines.push(item.purchaseType === "Job Material" ? "Expense: Job Material" : item.purchaseType === "Tire Inventory" ? "Expense: Tire Inventory" : unitLabel(item.assetNumber));
       lines.push(`Order date: ${item.orderDate}`);
     });
   } else {

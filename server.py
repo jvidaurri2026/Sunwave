@@ -78,6 +78,15 @@ def local_today():
     return datetime.now(LOCAL_TZ).date().isoformat()
 
 
+def normalize_shop_vendor(value):
+    vendor = str(value or "").strip()
+    vendor = re.sub(r"\s+\d{7,}$", "", vendor).strip()
+    vendor = re.sub(r"\s+\((?:CC|DB|NA\s*-\s*[^)]+)\)$", "", vendor, flags=re.IGNORECASE).strip()
+    if not vendor or vendor.casefold() == "fleetio":
+        return "Unspecified Fleetio Vendor"
+    return vendor
+
+
 def local_now_label():
     return datetime.now(LOCAL_TZ).strftime("%b %d, %Y %I:%M %p")
 
@@ -281,10 +290,17 @@ def init_db():
               updated_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS shop_vendors (
+              name TEXT PRIMARY KEY COLLATE NOCASE,
+              source TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS shop_repair_orders (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
               order_date TEXT NOT NULL,
               location TEXT NOT NULL,
+              vendor TEXT NOT NULL DEFAULT 'Sunwave Shop',
               technician_username TEXT NOT NULL,
               technician_name TEXT NOT NULL,
               driver_name TEXT NOT NULL DEFAULT '',
@@ -658,6 +674,43 @@ def init_db():
             conn.execute("ALTER TABLE shop_repair_orders ADD COLUMN source TEXT NOT NULL DEFAULT 'Repair Order'")
         if "source_reference_id" not in repair_order_columns:
             conn.execute("ALTER TABLE shop_repair_orders ADD COLUMN source_reference_id INTEGER")
+        if "vendor" not in repair_order_columns:
+            conn.execute("ALTER TABLE shop_repair_orders ADD COLUMN vendor TEXT NOT NULL DEFAULT ''")
+        repair_vendor_rows = conn.execute(
+            "SELECT id, source, location, vendor FROM shop_repair_orders"
+        ).fetchall()
+        for repair_vendor_row in repair_vendor_rows:
+            existing_vendor = str(repair_vendor_row["vendor"] or "").strip()
+            if existing_vendor:
+                vendor = normalize_shop_vendor(existing_vendor)
+            elif (repair_vendor_row["source"] or "") == "Fleetio":
+                vendor = normalize_shop_vendor(repair_vendor_row["location"])
+            elif (repair_vendor_row["source"] or "") == "Out of Service":
+                vendor = normalize_shop_vendor(repair_vendor_row["location"])
+            else:
+                vendor = "Sunwave Shop"
+            conn.execute("UPDATE shop_repair_orders SET vendor = ? WHERE id = ?", (vendor, repair_vendor_row["id"]))
+            conn.execute(
+                "INSERT OR IGNORE INTO shop_vendors (name, source, created_at) VALUES (?, ?, ?)",
+                (vendor, repair_vendor_row["source"] or "Repair Order", iso_now()),
+            )
+        for vendor_source_table in ("shop_parts", "shop_part_orders", "shop_repair_order_parts", "shop_bad_tires"):
+            vendor_rows = conn.execute(
+                f"SELECT DISTINCT vendor FROM {vendor_source_table} WHERE TRIM(COALESCE(vendor, '')) <> ''"
+            ).fetchall()
+            for vendor_row in vendor_rows:
+                vendor = normalize_shop_vendor(vendor_row["vendor"])
+                conn.execute(
+                    "INSERT OR IGNORE INTO shop_vendors (name, source, created_at) VALUES (?, 'Sunwave Shop', ?)",
+                    (vendor, iso_now()),
+                )
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_shop_repair_orders_source_reference
+            ON shop_repair_orders(source, source_reference_id)
+            WHERE source_reference_id IS NOT NULL
+            """
+        )
 
         shop_part_columns = {row["name"] for row in conn.execute("PRAGMA table_info(shop_parts)").fetchall()}
         if "description" not in shop_part_columns:
@@ -1996,14 +2049,29 @@ class Handler(SimpleHTTPRequestHandler):
         query = str(parse_qs(urlparse(self.path).query).get("q", [""])[0]).strip()
         if not query:
             return self.send_json({"error": "Enter a barcode or part number."}, 400)
+        cache_key = "shop_part_lookup_cache_" + hashlib.sha256(query.casefold().encode("utf-8")).hexdigest()
+        with connect() as conn:
+            cached_value = get_app_setting(conn, cache_key)
+        if cached_value:
+            try:
+                cached_payload = json.loads(cached_value)
+                cached_payload["cached"] = True
+                return self.send_json(cached_payload)
+            except (TypeError, json.JSONDecodeError):
+                pass
         compact = re.sub(r"[\s-]", "", query)
+        api_key = os.environ.get("UPCITEMDB_API_KEY", "").strip()
+        api_tier = "v1" if api_key else "trial"
         if compact.isdigit() and 7 <= len(compact) <= 14:
-            endpoint = "https://api.upcitemdb.com/prod/trial/lookup?" + urlencode({"upc": compact})
+            endpoint = f"https://api.upcitemdb.com/prod/{api_tier}/lookup?" + urlencode({"upc": compact})
             lookup_type = "barcode"
         else:
-            endpoint = "https://api.upcitemdb.com/prod/trial/search?" + urlencode({"s": query, "type": "product"})
+            endpoint = f"https://api.upcitemdb.com/prod/{api_tier}/search?" + urlencode({"s": query, "type": "product"})
             lookup_type = "part number"
-        request = urllib.request.Request(endpoint, headers={"Accept": "application/json", "User-Agent": "Sunwave-Shop/1.0"})
+        headers = {"Accept": "application/json", "User-Agent": "Sunwave-Shop/1.0"}
+        if api_key:
+            headers.update({"user_key": api_key, "key_type": "3scale"})
+        request = urllib.request.Request(endpoint, headers=headers)
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 payload = json.loads(response.read().decode("utf-8"))
@@ -2011,10 +2079,28 @@ class Handler(SimpleHTTPRequestHandler):
             if exc.code == 404:
                 return self.send_json({"query": query, "source": "UPCitemdb", "results": []})
             if exc.code == 429:
-                return self.send_json({"error": "The online lookup limit was reached. Try again later or enter the part manually."}, 429)
-            return self.send_json({"error": f"Online lookup returned HTTP {exc.code}."}, 502)
+                return self.send_json({
+                    "query": query,
+                    "source": "UPCitemdb",
+                    "lookupType": lookup_type,
+                    "results": [],
+                    "limited": True,
+                })
+            return self.send_json({
+                "query": query,
+                "source": "UPCitemdb",
+                "lookupType": lookup_type,
+                "results": [],
+                "unavailable": True,
+            })
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            return self.send_json({"error": f"Online lookup is unavailable: {exc}"}, 502)
+            return self.send_json({
+                "query": query,
+                "source": "UPCitemdb",
+                "lookupType": lookup_type,
+                "results": [],
+                "unavailable": True,
+            })
 
         results = []
         seen = set()
@@ -2051,7 +2137,11 @@ class Handler(SimpleHTTPRequestHandler):
             })
             if len(results) == 5:
                 break
-        self.send_json({"query": query, "source": "UPCitemdb", "lookupType": lookup_type, "results": results})
+        result_payload = {"query": query, "source": "UPCitemdb", "lookupType": lookup_type, "results": results}
+        if results:
+            with connect() as conn:
+                set_app_setting(conn, cache_key, json.dumps(result_payload, separators=(",", ":")))
+        self.send_json(result_payload)
 
     def save_shop_part(self):
         user = self.require_shop_part_intake()
@@ -2498,6 +2588,7 @@ class Handler(SimpleHTTPRequestHandler):
                     "id": int(order["id"]),
                     "date": order["order_date"],
                     "location": order["location"],
+                    "vendor": order["vendor"] or "Sunwave Shop",
                     "technicianName": order["technician_name"],
                     "driverName": order["driver_name"] or "",
                     "assetNumber": order["asset_number"],
@@ -2535,7 +2626,11 @@ class Handler(SimpleHTTPRequestHandler):
                     "originalScheduledDate": (schedule["original_scheduled_date"] or schedule["scheduled_date"]) if schedule else "",
                     "currentScheduledDate": schedule["scheduled_date"] if schedule else "",
                     "workingStartedDate": (schedule["working_started_at"] or "")[:10] if schedule else "",
-                    "completedDate": (schedule["completed_at"] or "")[:10] if schedule else "",
+                    "completedDate": (
+                        (schedule["completed_at"] or "")[:10]
+                        if schedule
+                        else (order["order_date"] if (order["source"] or "") == "Fleetio" else "")
+                    ),
                 })
         self.send_json(result)
 
@@ -2669,10 +2764,10 @@ class Handler(SimpleHTTPRequestHandler):
             cursor = conn.execute(
                 """
                 INSERT INTO shop_repair_orders (
-                  order_date, location, technician_username, technician_name,
+                  order_date, location, vendor, technician_username, technician_name,
                   driver_name, asset_number, asset_mileage, asset_hours, job_description, status,
                   source, source_reference_id, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, 'Sunwave Shop', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     order_date, location, user["username"], technician_name, driver_name, asset_number,
@@ -2681,6 +2776,10 @@ class Handler(SimpleHTTPRequestHandler):
                 ),
             )
             order_id = cursor.lastrowid
+            conn.execute(
+                "INSERT OR IGNORE INTO shop_vendors (name, source, created_at) VALUES ('Sunwave Shop', 'Repair Order', ?)",
+                (iso_now(),),
+            )
             conn.executemany(
                 "INSERT INTO shop_repair_order_codes (repair_order_id, code, description, labor_minutes, positions) VALUES (?, ?, ?, ?, ?)",
                 [(order_id, row["code"], row["description"], row["labor_minutes"], "|".join(requested_positions.get(row["code"], []))) for row in code_rows],
@@ -3143,18 +3242,22 @@ class Handler(SimpleHTTPRequestHandler):
                     order_cursor = conn.execute(
                         """
                         INSERT INTO shop_repair_orders (
-                          order_date, location, technician_username, technician_name, driver_name,
+                          order_date, location, vendor, technician_username, technician_name, driver_name,
                           asset_number, asset_mileage, asset_hours, job_description, status,
                           additional_cost_cents, source, source_reference_id, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Completed', ?, 'Out of Service', ?, ?)
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Completed', ?, 'Out of Service', ?, ?)
                         """,
                         (
-                            completed_date, third_party_shop or "Sunwave Shop", user["username"], user["name"],
+                            completed_date, third_party_shop or "Sunwave Shop", normalize_shop_vendor(third_party_shop or "Sunwave Shop"), user["username"], user["name"],
                             "Not provided", existing["asset_number"], "0", "0", description,
                             repair_cost_cents, numeric_id, now,
                         ),
                     )
                     repair_order_id = order_cursor.lastrowid
+                    conn.execute(
+                        "INSERT OR IGNORE INTO shop_vendors (name, source, created_at) VALUES (?, 'Out of Service', ?)",
+                        (normalize_shop_vendor(third_party_shop or "Sunwave Shop"), now),
+                    )
             cursor = conn.execute(
                 """
                 UPDATE shop_out_of_service

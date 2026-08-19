@@ -1,4 +1,4 @@
-const CACHE_NAME = "sunwave-tracker-v299";
+const CACHE_NAME = "sunwave-tracker-v305";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,8 +10,8 @@ const ASSETS = [
   "./icon.svg",
   "./sunwave-shop/",
   "./sunwave-shop/index.html",
-  "./sunwave-shop/styles.css?v=270",
-  "./sunwave-shop/app.js?v=280",
+  "./sunwave-shop/styles.css?v=274",
+  "./sunwave-shop/app.js?v=289",
   "./sunwave-shop/manifest.webmanifest"
 ];
 
@@ -40,6 +40,10 @@ self.addEventListener("fetch", (event) => {
       })
       .catch(() => {
         if (event.request.mode === "navigate") {
+          const requestUrl = new URL(event.request.url);
+          if (requestUrl.pathname.startsWith("/sunwave-shop/")) {
+            return caches.match("./sunwave-shop/index.html");
+          }
           return caches.match("./index.html");
         }
         return caches.match(event.request);

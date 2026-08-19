@@ -156,6 +156,7 @@ body {
   font-weight: 750;
 }
 .dashboard-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.dashboard-metrics article:has(#dashboardOtherExpense) { display: none !important; }
 .dashboard-metrics article { min-height: 102px; border: 1px solid var(--line); border-radius: 6px; padding: 15px; background: white; }
 .dashboard-metrics span { display: block; color: var(--muted); font-size: .84rem; font-weight: 700; }
 .dashboard-metrics strong { display: block; margin-top: 12px; color: var(--wine); font-size: 1.7rem; }
@@ -170,7 +171,7 @@ body {
 .chart-bar.working { background: #d2a915; }
 .chart-bar.completed { background: #3c8a55; }
 .chart-bar.cancelled { background: #b43c4d; }
-.expense-chart { min-height: 235px; display: grid; grid-template-columns: repeat(6, minmax(54px, 1fr)); gap: 10px; align-items: end; padding-top: 12px; }
+.expense-chart { min-height: 235px; display: grid; grid-template-columns: repeat(auto-fit, minmax(54px, 1fr)); gap: 10px; align-items: end; padding-top: 12px; }
 .expense-heading { align-items: flex-start; }
 .expense-heading > div:first-child { display: grid; gap: 3px; }
 .expense-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
@@ -183,7 +184,8 @@ body {
 .vendor-month-group h3 { margin: 0; color: var(--wine); font-size: .88rem; }
 .vendor-month-empty { color: var(--muted); font-size: .82rem; }
 .vendor-expense-columns { display: flex; gap: 12px; align-items: end; min-height: 210px; padding: 6px 2px 2px; overflow-x: auto; }
-.vendor-expense-column { display: grid; grid-template-rows: 20px 150px 38px; gap: 5px; flex: 1 0 76px; min-width: 76px; align-items: end; text-align: center; }
+.vendor-expense-column { display: grid; grid-template-rows: 20px 150px 38px; gap: 5px; flex: 1 0 76px; min-width: 76px; align-items: end; border: 0; border-radius: 5px; padding: 2px; text-align: center; background: transparent; font: inherit; cursor: pointer; }
+.vendor-expense-column:hover, .vendor-expense-column:focus-visible, .vendor-expense-column.selected { outline: 2px solid var(--wine); outline-offset: 1px; background: #f8f2f4; }
 .vendor-expense-column > strong { align-self: center; color: var(--wine); font-size: .76rem; }
 .vendor-expense-column > span { align-self: start; display: -webkit-box; overflow: hidden; color: var(--muted); font-size: .76rem; font-weight: 700; line-height: 1.2; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .vendor-expense-track { display: flex; width: 42px; height: 150px; margin: 0 auto; align-items: end; overflow: hidden; border-radius: 4px 4px 2px 2px; background: #e9ece9; }
@@ -222,6 +224,9 @@ body {
 .parts-quantity-row { display: grid; grid-template-columns: minmax(90px, 140px) minmax(100px, 1fr) 42px; gap: 9px; align-items: center; }
 .parts-quantity-row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 700; }
 .parts-quantity-bar { height: 18px; min-width: 3px; border-radius: 4px; background: #b0546d; }
+.expense-order-table { max-height: 420px; margin-top: 18px; border: 1px solid var(--line); border-radius: 6px; }
+.expense-order-table table { min-width: 920px; }
+.expense-order-table thead { position: sticky; top: 0; z-index: 1; background: white; }
 .dashboard-recent { overflow: hidden; }
 .current-inventory-page { min-width: 0; display: grid; gap: 16px; }
 .current-inventory-page > * { min-width: 0; }
@@ -321,6 +326,9 @@ th { color: var(--muted); font-size: .82rem; }
 .schedule-row.status-repairing-at-3rd-party > td { background: #fff0c2; }
 .schedule-row.status-sent-to-auction > td { background: #e6e1eb; }
 .schedule-row.status-fixed > td { background: #d9f2df; }
+.schedule-row.source-fleetio > td { background: #dceaf5; }
+.unit-history-description { min-width: 300px; max-width: 520px; }
+.unit-history-description strong { display: block; margin-bottom: 5px; color: #205b8f; }
 .schedule-row:hover > td { filter: brightness(.98); }
 .conditional-fields { display: grid; gap: 12px; padding-top: 4px; }
 .table-field-stack { display: grid; min-width: 180px; gap: 6px; }
@@ -371,7 +379,7 @@ th { color: var(--muted); font-size: .82rem; }
 @media (max-width: 560px) {
   .dashboard-heading { align-items: start; flex-direction: column; }
   .dashboard-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .expense-chart { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
+  .expense-chart { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
   .expense-column { min-width: 0; }
   .expense-heading { align-items: stretch; flex-direction: column; }
   .expense-tabs { width: 100%; }

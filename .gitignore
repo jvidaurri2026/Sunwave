@@ -219,3 +219,8 @@ __marimo__/
 # Local Sunwave databases and backups stay off GitHub.
 data/*.db
 data/backups/
+data/groupme-settings.json
+data/groupme-callback.log
+backups/
+work/
+equipment.db
