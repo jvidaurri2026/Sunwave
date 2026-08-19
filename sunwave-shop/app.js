@@ -61,6 +61,7 @@ const isShopAdmin = Boolean(session && session.user.role === "Admin");
 const isShopScheduler = Boolean(session && session.user.role === "Scheduler");
 const isShopTechnician = Boolean(session && session.user.role === "Technician");
 const isShopViewer = Boolean(session && session.user.role === "Shop Viewer");
+const canManageOutOfService = isShopAdmin || isShopTechnician;
 const canEditMechanicName = isShopAdmin || String(session?.user?.username || "").trim().toLowerCase() === "chicho";
 document.getElementById("shopWorkspace").hidden = !session;
 document.getElementById("shopDenied").hidden = Boolean(session);
@@ -1201,7 +1202,7 @@ function renderOutOfServiceReports() {
   outOfServiceReports.forEach((report) => {
     const row = document.createElement("tr");
     row.className = `schedule-row ${outOfServiceStatusClass(report.status)}`;
-    const thirdPartyDetails = isShopAdmin && ["Needs 3rd Party", "Repairing at 3rd Party"].includes(report.status)
+    const thirdPartyDetails = canManageOutOfService && ["Needs 3rd Party", "Repairing at 3rd Party"].includes(report.status)
       ? `<div class="table-field-stack"><input class="report-third-party-shop" value="${escapeHtml(report.thirdPartyShop)}" aria-label="Third-party shop" placeholder="Shop name"><input class="report-third-party-date" type="date" value="${escapeHtml(report.thirdPartySendDate)}" aria-label="Date to be sent"></div>`
       : report.status === "Fixed" && report.fixedAt
         ? `<div class="table-cell-lines"><strong>Completed ${escapeHtml(report.completedDate || report.fixedAt.slice(0, 10))}</strong>\nRepair cost: $${escapeHtml(report.repairCost || "0.00")}\n${escapeHtml(report.repairNotes || "No repair notes")}\nRO #${escapeHtml(report.repairOrderId || "Not linked")}</div>`
@@ -1209,14 +1210,14 @@ function renderOutOfServiceReports() {
     row.innerHTML = `
       <td><strong>${escapeHtml(report.assetNumber)}</strong></td>
       <td>${escapeHtml(report.outDate)}</td>
-      <td>${report.status === "Fixed" || !isShopAdmin ? escapeHtml(report.noEta ? "No ETA" : report.etaDate || "Not set") : `<div class="table-field-stack"><input class="report-eta-date table-date-input" type="date" value="${escapeHtml(report.etaDate || "")}" aria-label="ETA to fix" ${report.noEta ? "disabled" : ""}><label class="compact-switch"><input class="report-no-eta" type="checkbox" role="switch" ${report.noEta ? "checked" : ""}> No ETA</label></div>`}</td>
+      <td>${report.status === "Fixed" || !canManageOutOfService ? escapeHtml(report.noEta ? "No ETA" : report.etaDate || "Not set") : `<div class="table-field-stack"><input class="report-eta-date table-date-input" type="date" value="${escapeHtml(report.etaDate || "")}" aria-label="ETA to fix" ${report.noEta ? "disabled" : ""}><label class="compact-switch"><input class="report-no-eta" type="checkbox" role="switch" ${report.noEta ? "checked" : ""}> No ETA</label></div>`}</td>
       <td class="table-cell-lines">${escapeHtml(report.issue)}</td>
-      <td>${report.status === "Fixed" ? `<strong>Fix Completed</strong>` : isShopAdmin ? `<select class="table-status-select report-status" aria-label="Repair status"></select>` : escapeHtml(report.status)}</td>
+      <td>${report.status === "Fixed" ? `<strong>Fix Completed</strong>` : canManageOutOfService ? `<select class="table-status-select report-status" aria-label="Repair status"></select>` : escapeHtml(report.status)}</td>
       <td class="report-third-party-cell">${thirdPartyDetails}</td>
       <td>${escapeHtml(report.updatedBy || "Unknown")}</td>
-      <td>${report.status === "Fixed" ? "Back in service" : isShopAdmin ? `<button class="table-action update-out-of-service" type="button">Update</button>` : "View only"}</td>
+      <td>${report.status === "Fixed" ? "Back in service" : canManageOutOfService ? `<button class="table-action update-out-of-service" type="button">Update</button>` : "View only"}</td>
     `;
-    if (report.status !== "Fixed" && isShopAdmin) {
+    if (report.status !== "Fixed" && canManageOutOfService) {
       const statusSelect = row.querySelector(".report-status");
       ["Diagnosing", "Waiting for Parts", "Needs 3rd Party", "Repairing at 3rd Party", "Sent to Auction"].forEach((status) => statusSelect.add(new Option(status, status)));
       statusSelect.add(new Option("Fix Completed", "Fixed"));

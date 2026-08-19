@@ -3136,7 +3136,7 @@ class Handler(SimpleHTTPRequestHandler):
         return ""
 
     def save_shop_out_of_service(self):
-        user = self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         data = self.read_json()
@@ -3192,7 +3192,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(self.out_of_service_payload(row), 201)
 
     def update_shop_out_of_service_status(self, record_id):
-        user = self.require_admin()
+        user = self.require_shop_technician()
         if user is None:
             return
         try:
