@@ -883,6 +883,26 @@ form {
   max-width: 560px;
 }
 
+.lookup-master-catalog {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.lookup-master-catalog .compact-title p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.lookup-master-table {
+  min-width: 560px;
+}
+
+.lookup-master-table td:nth-child(n + 3),
+.lookup-master-table th:nth-child(n + 3) {
+  text-align: center;
+}
+
 .compact-title {
   margin-bottom: 10px;
 }

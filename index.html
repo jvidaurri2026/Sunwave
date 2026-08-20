@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#173f35">
   <title>Sunwave Tracker</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=254">
+  <link rel="stylesheet" href="styles.css?v=255">
 </head>
 <body class="booting">
   <main class="app-shell">
@@ -359,6 +359,27 @@
             </label>
             <button id="saveLookupJobBtn" class="primary" type="button">Save assignment</button>
           </div>
+          <section class="lookup-master-catalog" aria-labelledby="lookupMasterCatalogTitle">
+            <div class="compact-title">
+              <h3 id="lookupMasterCatalogTitle">Master numbers and quantities</h3>
+              <p>Current quantities are always visible on this page.</p>
+            </div>
+            <div class="table-wrap">
+              <table class="lookup-master-table">
+                <thead>
+                  <tr>
+                    <th>Master #</th>
+                    <th>Categories</th>
+                    <th>Available</th>
+                    <th>Assigned</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="lookupMasterCatalogTable"></tbody>
+              </table>
+            </div>
+            <p id="lookupMasterCatalogEmpty" class="empty-state">No master numbers are available.</p>
+          </section>
         </section>
       </section>
 
@@ -967,6 +988,6 @@
 
   <script src="config.js"></script>
   <script src="jsQR.js"></script>
-  <script src="app.js?v=257"></script>
+  <script src="app.js?v=258"></script>
 </body>
 </html>

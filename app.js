@@ -881,6 +881,7 @@ async function loadQuantityAssets() {
     renderMasterUseOptions();
     renderInventoryMasterOptions();
     renderInventoryYardChecklist();
+    renderLookupMasterCatalog();
   } catch (error) {
     if (isNetworkError(error)) {
       state.quantityAssets = readLocal(QUANTITY_ASSET_CACHE_KEY, []);
@@ -890,6 +891,7 @@ async function loadQuantityAssets() {
       renderMasterUseOptions();
       renderInventoryMasterOptions();
       renderInventoryYardChecklist();
+      renderLookupMasterCatalog();
       updateConnectionStatus();
       return;
     }
@@ -908,6 +910,7 @@ async function loadQuantityAssetHistory() {
     renderMasterUseOptions();
     renderInventoryMasterOptions();
     renderInventoryYardChecklist();
+    renderLookupMasterCatalog();
   } catch (error) {
     if (isNetworkError(error)) {
       state.quantityAssetHistory = readLocal(QUANTITY_ASSET_HISTORY_CACHE_KEY, []);
@@ -918,6 +921,7 @@ async function loadQuantityAssetHistory() {
       renderMasterUseOptions();
       renderInventoryMasterOptions();
       renderInventoryYardChecklist();
+      renderLookupMasterCatalog();
       updateConnectionStatus();
       return;
     }
@@ -2860,6 +2864,31 @@ function renderQuantityAssetDashboard() {
         <b><span>${available} available</span><span>${used} used</span></b>
       `;
       container.append(row);
+    });
+}
+
+function renderLookupMasterCatalog() {
+  const tbody = $("lookupMasterCatalogTable");
+  const emptyState = $("lookupMasterCatalogEmpty");
+  if (!tbody || !emptyState) return;
+
+  tbody.replaceChildren();
+  emptyState.hidden = state.quantityAssets.length > 0;
+  state.quantityAssets
+    .slice()
+    .sort((a, b) => String(a.masterNumber).localeCompare(String(b.masterNumber), undefined, { numeric: true }))
+    .forEach((item) => {
+      const available = Number(item.quantity || 0) + getQuantityAssetAvailableAssignmentQuantity(item.masterNumber);
+      const assigned = getQuantityAssetUsedQuantity(item.masterNumber);
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td><strong>${escapeHtml(item.masterNumber)}</strong></td>
+        <td>${escapeHtml(getQuantityAssetCategoryText(item))}</td>
+        <td><span class="status available">${available}</span></td>
+        <td><span class="status active">${assigned}</span></td>
+        <td><strong>${available + assigned}</strong></td>
+      `;
+      tbody.append(row);
     });
 }
 
