@@ -1818,13 +1818,13 @@ async function handleLookupJobSave() {
         method: "POST",
         body: JSON.stringify({
           id: record.id, name: record.name, assetTag: record.assetTag, category: record.category,
-          assignedTo: jobName, latitude: record.latitude, longitude: record.longitude,
+          assignedTo: jobName, latitude: "", longitude: "",
           notes: record.notes, photos: record.photos || []
         })
       });
       await Promise.all([loadEquipment(), loadAssetHistory()]);
       renderLookupResult(findAssetsByLookup($("lookupSearchInput").value), findMasterCodesByLookup($("lookupSearchInput").value));
-      $("lookupMessage").textContent = `Asset assigned to ${jobName}.`;
+      $("lookupMessage").textContent = `Asset assigned to ${jobName}. Saved coordinates were removed.`;
     } catch (error) {
       $("lookupMessage").textContent = error.message || "Could not save the asset assignment.";
     }
