@@ -110,7 +110,7 @@ if (session) {
   document.getElementById("serviceAvailabilityDate").addEventListener("change", renderServiceAvailability);
   document.getElementById("repairOrderAssetFilter").addEventListener("change", renderRepairOrders);
   document.getElementById("unitRepairHistoryAsset").addEventListener("change", renderUnitRepairHistory);
-  document.getElementById("shareTodayRepairsWhatsapp").addEventListener("click", shareTodayRepairsWhatsapp);
+  document.getElementById("shareTodayRepairsWhatsapp").addEventListener("click", shareYesterdayRepairsWhatsapp);
   document.getElementById("shareDashboardWhatsapp").addEventListener("click", shareDashboardWhatsappReport);
   document.getElementById("shareTireInventoryWhatsapp").addEventListener("click", shareTireInventoryWhatsappReport);
   document.getElementById("whatsappSettingsForm").addEventListener("submit", saveWhatsAppSettings);
@@ -2218,48 +2218,53 @@ function renderUnitRepairHistory() {
   empty.textContent = assetNumber ? "No saved repair orders were found for this unit." : "Select a unit to view its repair history.";
 }
 
-function shareTodayRepairsWhatsapp() {
-  const today = localDateValue();
+function buildYesterdayRepairOrdersWhatsappReport() {
   const yesterdayDate = new Date();
   yesterdayDate.setDate(yesterdayDate.getDate() - 1);
   const yesterday = localDateValue(yesterdayDate);
-  const selectedOrders = repairOrders.filter((order) => order.date === yesterday || order.date === today);
+  const selectedOrders = repairOrders.filter((order) => order.date === yesterday);
+  const lines = [`Yesterday's Repair Orders Report - ${yesterday}`, `Repair Orders: ${selectedOrders.length}`];
+  selectedOrders.forEach((order) => {
+    const unit = unitTypes.find((item) => item.assetNumber === order.assetNumber);
+    lines.push("", `RO #${order.id} - ${[unit?.make, unit?.unitType].filter(Boolean).join(" ") || "Unknown unit"} - ${order.assetNumber}`);
+    lines.push(`Driver: ${order.driverName || "Not set"}`);
+    (order.repairCodes || []).forEach((code) => {
+      const positions = (code.positions || []).length ? ` (${code.positions.join(", ")})` : "";
+      lines.push(`- ${code.description || code.code}${positions}`);
+      (code.options || []).forEach((option) => lines.push(`  - ${option.name}`));
+    });
+    const parts = (order.partsUsed || []).filter((part) => Number(part.quantity || 0) > 0);
+    if (parts.length) {
+      lines.push("Parts used:");
+      parts.forEach((part) => lines.push(`- ${part.partNumber} - ${part.description || "No description"}: Qty ${part.quantity}`));
+    }
+  });
+  return {
+    count: selectedOrders.length,
+    report: lines.join("\n")
+  };
+}
+
+function shareYesterdayRepairsWhatsapp() {
   const status = document.getElementById("repairOrdersShareMessage");
-  if (!selectedOrders.length) {
-    status.textContent = "There are no saved repair orders for yesterday or today.";
+  const { count, report } = buildYesterdayRepairOrdersWhatsappReport();
+  if (!count) {
+    status.textContent = "There are no saved repair orders from yesterday.";
     return;
   }
-  const lines = ["Repair Orders Report"];
-  [["Yesterday", yesterday], ["Today", today]].forEach(([label, reportDate]) => {
-    const dayOrders = selectedOrders.filter((order) => order.date === reportDate);
-    lines.push("", `${label} - ${reportDate}`, `Repair Orders: ${dayOrders.length}`);
-    if (!dayOrders.length) {
-      lines.push("No repair orders saved.");
-      return;
-    }
-    dayOrders.forEach((order) => {
-      const unit = unitTypes.find((item) => item.assetNumber === order.assetNumber);
-      lines.push("", `${[unit?.make, unit?.unitType].filter(Boolean).join(" ") || "Unknown unit"} - ${order.assetNumber}`);
-      lines.push(`Driver: ${order.driverName || "Not set"}`);
-      (order.repairCodes || []).forEach((code) => {
-        const positions = (code.positions || []).length ? ` (${code.positions.join(", ")})` : "";
-        lines.push(`- ${code.description || code.code}${positions}`);
-        (code.options || []).forEach((option) => lines.push(`  - ${option.name}`));
-      });
-      const parts = (order.partsUsed || []).filter((part) => Number(part.quantity || 0) > 0);
-      if (parts.length) {
-        lines.push("Parts used:");
-        parts.forEach((part) => lines.push(`- ${part.partNumber} - ${part.description || "No description"}: Qty ${part.quantity}`));
-      }
-    });
-  });
-  status.textContent = `${selectedOrders.length} repair order${selectedOrders.length === 1 ? "" : "s"} ready to share.`;
-  window.open(`https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`, "_blank", "noopener,noreferrer");
+  const recipient = document.getElementById("whatsappRecipientNumber").value.replace(/\D/g, "");
+  const baseUrl = recipient ? `https://wa.me/${recipient}` : "https://wa.me/";
+  status.textContent = recipient
+    ? `${count} repair order${count === 1 ? "" : "s"} ready for WhatsApp recipient ending in ${recipient.slice(-4)}.`
+    : `${count} repair order${count === 1 ? "" : "s"} ready. Configure a WhatsApp recipient for direct sharing.`;
+  window.open(`${baseUrl}?text=${encodeURIComponent(report)}`, "_blank", "noopener,noreferrer");
 }
 
 function buildDashboardWhatsappReport() {
   const today = localDateValue();
-  const todaysOrders = repairOrders.filter((order) => isRepairOrderForDate(order, today));
+  const todaysOrders = repairOrders.filter((order) => (
+    order.completedDate === today || (!order.completedDate && order.date === today)
+  ));
   const activeOutOfService = outOfServiceReports.filter((report) => report.status !== "Fixed");
   const orderedToday = shopPartOrders.filter((item) => item.orderDate === today && item.status === "Waiting for Order");
   const pickedUpToday = shopPartOrders.filter((item) => item.status === "Order Received" && item.pickupDate === today);
