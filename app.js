@@ -20,6 +20,8 @@ const state = {
   currentAuditsMessage: "",
   auditHistoryMessage: "",
   lookupAssetId: "",
+  lookupMasterNumber: "",
+  lookupAssignmentType: "",
   inventoryAssetId: "",
   inventoryBaselineReady: false,
   users: [],
@@ -324,6 +326,7 @@ function bindEvents() {
   $("lookupQrScanBtn").addEventListener("click", () => startLookupScan("qr"));
   $("closeLookupScannerBtn").addEventListener("click", stopLookupScan);
   $("saveLookupQrBtn").addEventListener("click", handleLookupQrSave);
+  $("saveLookupJobBtn").addEventListener("click", handleLookupJobSave);
   $("inventorySearchBtn").addEventListener("click", handleInventoryLookup);
   $("inventorySearchInput").addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
@@ -529,6 +532,9 @@ function configureAccess() {
   if ($("inventoryMasterQuantity")) $("inventoryMasterQuantity").disabled = !editable;
   if ($("inventoryMasterJob")) $("inventoryMasterJob").disabled = !editable;
   if ($("saveInventoryMasterBtn")) $("saveInventoryMasterBtn").disabled = !editable;
+  if ($("lookupJobSelect")) $("lookupJobSelect").disabled = !editable;
+  if ($("lookupMasterQuantity")) $("lookupMasterQuantity").disabled = !editable;
+  if ($("saveLookupJobBtn")) $("saveLookupJobBtn").disabled = !editable;
   updateInventoryMasterJobVisibility();
 }
 
@@ -1604,7 +1610,14 @@ function findAssetsByLookup(value) {
 
 function handleAssetLookup() {
   const records = findAssetsByLookup($("lookupSearchInput").value);
-  renderLookupResult(records);
+  const masterRecords = findMasterCodesByLookup($("lookupSearchInput").value);
+  renderLookupResult(records, masterRecords);
+}
+
+function findMasterCodesByLookup(value) {
+  const search = String(value || "").trim().replace(/^master\s*#?\s*/i, "").toLowerCase();
+  if (!search) return [];
+  return state.quantityAssets.filter((item) => String(item.masterNumber || "").trim().toLowerCase() === search);
 }
 
 function handleInventoryLookup() {
@@ -1638,13 +1651,14 @@ function assetLookupCardsHtml(record) {
   `;
 }
 
-function lookupRecordHtml(record, actions = []) {
+function lookupRecordHtml(record, actions = [], warning = "") {
   if (typeof actions === "string") actions = actions ? [{ label: actions, action: "select" }] : [];
   return `
     <section class="lookup-record">
       <div class="lookup-result">
         ${assetLookupCardsHtml(record)}
       </div>
+      ${warning}
       ${actions.length ? `<div class="lookup-actions">${actions.map((item) => (
         `<button class="secondary lookup-action-btn" type="button" data-action="${escapeHtml(item.action)}" data-asset-id="${escapeHtml(record.id)}">${escapeHtml(item.label)}</button>`
       )).join("")}</div>` : ""}
@@ -1652,49 +1666,195 @@ function lookupRecordHtml(record, actions = []) {
   `;
 }
 
-function renderLookupResult(records) {
+function masterLookupRecordHtml(record) {
+  const available = Number(record.quantity || 0) + getQuantityAssetAvailableAssignmentQuantity(record.masterNumber);
+  return `
+    <section class="lookup-record">
+      <div class="lookup-result">
+        <article><span>Master code</span><strong>${escapeHtml(record.masterNumber)}</strong></article>
+        <article><span>Categories</span><strong>${escapeHtml(getQuantityAssetCategoryText(record))}</strong></article>
+        <article><span>Available quantity</span><strong>${available}</strong></article>
+      </div>
+      <div class="lookup-actions">
+        <button class="secondary lookup-master-action-btn" type="button" data-master-number="${escapeHtml(record.masterNumber)}">Assign quantity to job</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderLookupResult(records, masterRecords = []) {
   if (!Array.isArray(records)) records = records ? [records] : [];
+  if (!Array.isArray(masterRecords)) masterRecords = masterRecords ? [masterRecords] : [];
   const result = $("lookupResult");
   const assignPanel = $("lookupQrAssignPanel");
+  const jobPanel = $("lookupJobAssignPanel");
   $("lookupMessage").textContent = "";
   state.lookupAssetId = "";
+  state.lookupMasterNumber = "";
+  state.lookupAssignmentType = "";
   result.replaceChildren();
-  result.hidden = records.length === 0;
+  result.hidden = records.length === 0 && masterRecords.length === 0;
   assignPanel.hidden = true;
+  jobPanel.hidden = true;
   $("lookupQrInput").value = "";
+  $("lookupMasterQuantity").value = "";
 
-  if (!records.length) {
+  if (!records.length && !masterRecords.length) {
     $("lookupMessage").textContent = $("lookupSearchInput").value.trim()
-      ? "No asset found with that number or QR code."
-      : "Enter an asset number or scan a QR code.";
+      ? "No asset or master code found with that value."
+      : "Enter an asset number, master code, or scan a QR code.";
     return;
   }
 
   result.innerHTML = records.map((record) => {
-    const actions = !record.assetTag ? [{ label: "Add QR to this asset", action: "add-qr" }] : [];
-    return lookupRecordHtml(record, actions);
-  }).join("");
+    const actions = [{ label: "Assign this asset to a job", action: "assign-job" }];
+    if (!record.assetTag) actions.push({ label: "Add QR to this asset", action: "add-qr" });
+    const warning = isRealJobName(record.assignedTo)
+      ? `<p class="lookup-warning">Warning: this asset is currently assigned to ${escapeHtml(record.assignedTo)}, not ${escapeHtml(YARD_JOB_NAME)}.</p>`
+      : "";
+    return lookupRecordHtml(record, actions, warning);
+  }).join("") + masterRecords.map(masterLookupRecordHtml).join("");
 
   result.querySelectorAll(".lookup-action-btn").forEach((button) => {
     button.addEventListener("click", () => {
       if (!canEdit()) {
-        $("lookupMessage").textContent = "Sign in as Admin or Manager to add QR codes.";
+        $("lookupMessage").textContent = "Sign in as Admin or Manager to change assignments or QR codes.";
         return;
       }
       state.lookupAssetId = button.dataset.assetId;
+      state.lookupMasterNumber = "";
+      const record = state.equipment.find((item) => item.id === state.lookupAssetId);
+      if (button.dataset.action === "assign-job") {
+        state.lookupAssignmentType = "asset";
+        assignPanel.hidden = true;
+        prepareLookupJobAssignment(record);
+        return;
+      }
       assignPanel.hidden = false;
+      jobPanel.hidden = true;
       $("lookupQrInput").value = "";
       $("lookupMessage").textContent = "Scan or type the QR code for the selected asset.";
     });
   });
 
+  result.querySelectorAll(".lookup-master-action-btn").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!canEdit()) {
+        $("lookupMessage").textContent = "Sign in as Admin or Manager to assign master quantities.";
+        return;
+      }
+      state.lookupAssignmentType = "master";
+      state.lookupAssetId = "";
+      state.lookupMasterNumber = button.dataset.masterNumber;
+      assignPanel.hidden = true;
+      prepareLookupMasterAssignment(state.lookupMasterNumber);
+    });
+  });
+
   const missingQr = records.filter((record) => !record.assetTag).length;
   if (missingQr) {
-    $("lookupMessage").textContent = canEdit()
-      ? `Found ${records.length} asset record(s). ${missingQr} do not have QR codes.`
-      : `Found ${records.length} asset record(s). ${missingQr} do not have QR codes.`;
+    $("lookupMessage").textContent = `Found ${records.length} asset record(s) and ${masterRecords.length} master code(s). ${missingQr} do not have QR codes.`;
   } else {
-    $("lookupMessage").textContent = `Found ${records.length} asset record(s).`;
+    $("lookupMessage").textContent = `Found ${records.length} asset record(s) and ${masterRecords.length} master code(s).`;
+  }
+}
+
+function renderLookupJobOptions({ includeYard = false, selectedValue = "" } = {}) {
+  const select = $("lookupJobSelect");
+  select.replaceChildren(new Option("Select", ""));
+  if (includeYard) select.add(new Option(YARD_JOB_NAME, YARD_JOB_NAME));
+  state.jobs.forEach((job) => {
+    if (!job.name || isYardJobName(job.name) || isAvailableJobName(job.name)) return;
+    select.add(new Option(job.name, job.name));
+  });
+  if (selectedValue && ![...select.options].some((option) => option.value === selectedValue)) {
+    select.add(new Option(selectedValue, selectedValue));
+  }
+  select.value = selectedValue;
+}
+
+function prepareLookupJobAssignment(record) {
+  const panel = $("lookupJobAssignPanel");
+  $("lookupAssignTitle").textContent = `Assign asset ${record?.name || record?.id || ""} to a job`;
+  $("lookupMasterQuantityLabel").hidden = true;
+  const warning = $("lookupAssignmentWarning");
+  const hasOtherJob = record && isRealJobName(record.assignedTo);
+  warning.hidden = !hasOtherJob;
+  warning.textContent = hasOtherJob
+    ? `Warning: this asset is currently assigned to ${record.assignedTo}, not ${YARD_JOB_NAME}. Saving will reassign it.`
+    : "";
+  renderLookupJobOptions({ includeYard: true, selectedValue: record?.assignedTo || YARD_JOB_NAME });
+  panel.hidden = false;
+  $("lookupMessage").textContent = "Choose the destination job for this asset.";
+}
+
+function prepareLookupMasterAssignment(masterNumber) {
+  const panel = $("lookupJobAssignPanel");
+  $("lookupAssignTitle").textContent = `Assign master code ${masterNumber} to a job`;
+  $("lookupMasterQuantityLabel").hidden = false;
+  $("lookupAssignmentWarning").hidden = true;
+  renderLookupJobOptions();
+  panel.hidden = false;
+  $("lookupMessage").textContent = "Enter the quantity and choose its destination job.";
+}
+
+async function handleLookupJobSave() {
+  if (!canEdit()) return;
+  const jobName = $("lookupJobSelect").value;
+  if (!jobName) {
+    $("lookupMessage").textContent = "Select a job.";
+    return;
+  }
+
+  if (state.lookupAssignmentType === "asset") {
+    const record = state.equipment.find((item) => item.id === state.lookupAssetId);
+    if (!record) {
+      $("lookupMessage").textContent = "Find and select an asset first.";
+      return;
+    }
+    if (isRealJobName(record.assignedTo) && record.assignedTo !== jobName && !confirm(`This asset is assigned to ${record.assignedTo}. Reassign it to ${jobName}?`)) return;
+    try {
+      await api("/api/equipment", {
+        method: "POST",
+        body: JSON.stringify({
+          id: record.id, name: record.name, assetTag: record.assetTag, category: record.category,
+          assignedTo: jobName, latitude: record.latitude, longitude: record.longitude,
+          notes: record.notes, photos: record.photos || []
+        })
+      });
+      await Promise.all([loadEquipment(), loadAssetHistory()]);
+      renderLookupResult(findAssetsByLookup($("lookupSearchInput").value), findMasterCodesByLookup($("lookupSearchInput").value));
+      $("lookupMessage").textContent = `Asset assigned to ${jobName}.`;
+    } catch (error) {
+      $("lookupMessage").textContent = error.message || "Could not save the asset assignment.";
+    }
+    return;
+  }
+
+  if (state.lookupAssignmentType === "master") {
+    const masterNumber = state.lookupMasterNumber;
+    const quantity = Number($("lookupMasterQuantity").value || 0);
+    if (!masterNumber || quantity <= 0) {
+      $("lookupMessage").textContent = "Enter a quantity greater than zero.";
+      return;
+    }
+    try {
+      await api("/api/quantity-assets/adjust", {
+        method: "POST",
+        body: JSON.stringify({
+          category: masterNumber,
+          masterNumber,
+          action: "Use",
+          quantity,
+          jobName
+        })
+      });
+      await Promise.all([loadQuantityAssets(), loadQuantityAssetHistory()]);
+      renderLookupResult(findAssetsByLookup($("lookupSearchInput").value), findMasterCodesByLookup($("lookupSearchInput").value));
+      $("lookupMessage").textContent = `${quantity} from master code ${masterNumber} assigned to ${jobName}.`;
+    } catch (error) {
+      $("lookupMessage").textContent = error.message || "Could not save the master-code assignment.";
+    }
   }
 }
 

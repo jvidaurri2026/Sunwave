@@ -845,6 +845,16 @@ form {
   gap: 8px;
 }
 
+.lookup-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #d69a62;
+  border-radius: 6px;
+  color: #744111;
+  background: #fff0d8;
+  font-weight: 800;
+}
+
 .lookup-result article,
 .lookup-assign {
   padding: 12px;

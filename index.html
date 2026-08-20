@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#173f35">
   <title>Sunwave Tracker</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=253">
+  <link rel="stylesheet" href="styles.css?v=254">
 </head>
 <body class="booting">
   <main class="app-shell">
@@ -315,9 +315,9 @@
             <h2>Asset lookup</h2>
             <div class="list-filters">
               <label class="search-label">
-                Asset number or QR code
+                Asset number, master code, or QR code
                 <span class="scan-field">
-                  <input id="lookupSearchInput" autocomplete="off" placeholder="Asset number or QR code">
+                  <input id="lookupSearchInput" autocomplete="off" placeholder="Asset number, master code, or QR code">
                   <button id="lookupScanBtn" class="secondary scan-button" type="button">Scan</button>
                 </span>
               </label>
@@ -343,6 +343,21 @@
               </span>
             </label>
             <button id="saveLookupQrBtn" class="primary" type="button">Save QR code</button>
+          </div>
+          <div id="lookupJobAssignPanel" class="lookup-assign" hidden>
+            <h3 id="lookupAssignTitle">Assign to a job</h3>
+            <p id="lookupAssignmentWarning" class="lookup-warning" hidden></p>
+            <label id="lookupMasterQuantityLabel" hidden>
+              Quantity to assign
+              <input id="lookupMasterQuantity" type="number" min="1" step="1" placeholder="1">
+            </label>
+            <label>
+              Job
+              <select id="lookupJobSelect">
+                <option value="">Select</option>
+              </select>
+            </label>
+            <button id="saveLookupJobBtn" class="primary" type="button">Save assignment</button>
           </div>
         </section>
       </section>
@@ -952,6 +967,6 @@
 
   <script src="config.js"></script>
   <script src="jsQR.js"></script>
-  <script src="app.js?v=255"></script>
+  <script src="app.js?v=256"></script>
 </body>
 </html>
